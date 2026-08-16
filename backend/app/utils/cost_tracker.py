@@ -1,6 +1,6 @@
 import litellm
 from typing import Dict, Any
-
+#its just the tracker for the cost 
 # Local fallback pricing dictionary (Cost per token in USD)
 FALLBACK_PRICING: Dict[str, Dict[str, float]] = {
     "gpt-4o-mini": {
