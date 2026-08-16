@@ -1,24 +1,30 @@
-# Cost-Aware Agent
+# Cost-Aware Agent Router
 
-<!-- One-line description — e.g. "An AI agent that optimizes task execution under a defined compute/API budget." -->
-[FILL IN: 2-3 sentence description of what this agent does and the problem it solves]
+A dynamic, confidence-based routing system that reduces LLM inference cost while maintaining response quality — routing tasks across multiple agents/models instead of relying on a single LLM for every request.
 
 ## Overview
 
-[FILL IN: What decisions does the agent make? What is it optimizing — API spend, latency, compute cycles? What makes it "cost-aware" specifically?]
+Not every query needs the most expensive model. Cost-Aware Agent Router evaluates incoming tasks and routes each one to the most cost-effective model capable of handling it, using confidence scoring to decide when a cheaper/faster model is sufficient versus when a stronger model is warranted. This addresses a practical problem in production AI systems: LLM API costs scale directly with usage, and most requests don't need top-tier reasoning to be answered well.
+
+**Research angle:** dynamic, confidence-based routing across multiple agents (rather than static routing to a single model) is a relatively unexplored area in multi-agent system design.
 
 ## Features
 
-- [FILL IN: e.g. Dynamic cost estimation per action/tool call]
-- [FILL IN: e.g. Budget-constrained decision making]
-- [FILL IN: e.g. Fallback strategies when nearing budget limits]
+- **Confidence-based routing** — dynamically selects the model/agent best suited to a given task based on confidence scoring, rather than a fixed routing rule
+- **Multi-model support** — works across multiple Groq-hosted models and open-source LLMs
+- **Cost tracking** — measures dollar cost saved per routing decision compared to always using the top-tier model
+- **Performance metrics** — tracks latency, accuracy, and token usage per request to evaluate routing quality
+- **Evaluation-ready** — built with clear, measurable metrics (cost, latency, accuracy, tokens) for benchmarking routing strategies
 
 ## Tech stack
 
 | Layer | Tech |
 |---|---|
 | Language | Python |
-| [FILL IN] | [FILL IN] |
+| Backend | FastAPI *(update if different)* |
+| Storage | SQLite |
+| LLM providers | Groq, open-source LLMs |
+| Testing | pytest |
 
 ## Getting started
 
@@ -28,6 +34,17 @@ cd Cost-aware-agent
 pip install -r requirements.txt
 python main.py
 ```
+
+## Metrics tracked
+
+- 💰 Cost saved ($) vs. single-model baseline
+- ⚡ Latency per request
+- 🎯 Accuracy / response quality
+- 🔢 Token usage
+
+## Why this approach
+
+Static routing (always using one model, or simple rule-based fallbacks) leaves cost savings on the table. By scoring confidence dynamically per request, this router can send simple queries to cheaper/faster models and reserve stronger models for tasks that genuinely need them — cutting inference spend without sacrificing output quality.
 
 ## License
 
