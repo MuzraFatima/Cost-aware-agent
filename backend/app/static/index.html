@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cost-Aware Agent Router (CAAR) Dashboard</title>
+  <!-- Google Fonts & FontAwesome CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Custom Style Sheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header>
+      <div class="brand-section">
+        <div class="brand-icon">
+          <i class="fa-solid fa-network-wired"></i>
+        </div>
+        <div class="brand-title">
+          <h1>Cost-Aware Agent Router</h1>
+          <p>Confidence-Based Multi-Agent LLM Gateway</p>
+        </div>
+      </div>
+      <!-- Tab Selector Navigation -->
+      <nav class="tabs-navigation">
+        <button class="tab-btn active" onclick="switchTab(event, 'tab-analytics')">
+          <i class="fa-solid fa-chart-line"></i> Analytics
+        </button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab-sandbox')">
+          <i class="fa-solid fa-flask"></i> Sandbox
+        </button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab-policies')">
+          <i class="fa-solid fa-sliders"></i> Policies
+        </button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab-logs')">
+          <i class="fa-solid fa-list-check"></i> Logs
+        </button>
+      </nav>
+    </header>
+
+    <!-- TAB 1: Analytics Dashboard -->
+    <div id="tab-analytics" class="tab-panel active">
+      <!-- KPI Stats Group -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span>Aggregated Cost spent</span>
+            <div class="kpi-icon" style="background: rgba(99, 102, 241, 0.15); color: var(--color-primary);">
+              <i class="fa-solid fa-receipt"></i>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpi-cost">$0.00000</div>
+          <div class="kpi-desc">Token expenditure tracking</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span>Estimated Savings</span>
+            <div class="kpi-icon" style="background: rgba(16, 185, 129, 0.15); color: var(--color-success);">
+              <i class="fa-solid fa-piggy-bank"></i>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpi-savings" style="color: var(--color-success);">$0.00000</div>
+          <div class="kpi-desc">Savings vs. Frontier-only model</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span>Average Latency</span>
+            <div class="kpi-icon" style="background: rgba(6, 182, 212, 0.15); color: var(--color-secondary);">
+              <i class="fa-solid fa-gauge-high"></i>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpi-latency">0 ms</div>
+          <div class="kpi-desc">Time-to-response duration</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span>Avg Step Confidence</span>
+            <div class="kpi-icon" style="background: rgba(245, 158, 11, 0.15); color: var(--color-warning);">
+              <i class="fa-solid fa-shield-halved"></i>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpi-confidence">0.00</div>
+          <div class="kpi-desc">Accepted output confidence level</div>
+        </div>
+      </div>
+
+      <!-- Live Charts Group -->
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title">
+            <span>Cost Efficiency Metrics (Savings vs. Expense)</span>
+            <span style="font-size: 0.8rem; font-weight: normal; color: var(--color-text-muted);">Cumulative (USD)</span>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="costSavingsChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">
+            <span>Tier Distribution</span>
+            <span style="font-size: 0.8rem; font-weight: normal; color: var(--color-text-muted);">Route selections</span>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="tierDistributionChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Router Sandbox -->
+    <div id="tab-sandbox" class="tab-panel">
+      <div class="sandbox-grid">
+        <!-- Input Form Control -->
+        <div class="panel-card">
+          <h2>Gateway Playground</h2>
+          <div class="form-group">
+            <label for="sandbox-prompt">Input Prompt</label>
+            <textarea id="sandbox-prompt" class="form-textarea" placeholder="Type your instruction... (e.g. 'Solve 123 * 45' to test math escalations or 'Output user profile JSON' for schema validation tests)"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="sandbox-domain">Query Domain Category</label>
+            <select id="sandbox-domain" class="form-select">
+              <option value="general">General (Default)</option>
+              <option value="coding">Coding (Strict Syntactic Check)</option>
+              <option value="math">Mathematics (Self-Consistency Logic)</option>
+              <option value="creative">Creative (Low Constraint)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="sandbox-format">Expected Format Specifier</label>
+            <select id="sandbox-format" class="form-select">
+              <option value="">Plain Text / None</option>
+              <option value="json">Structured JSON String</option>
+              <option value="python">Executable Python Snippet</option>
+            </select>
+          </div>
+          <button class="action-btn" onclick="submitSandboxPrompt()">
+            <i class="fa-solid fa-paper-plane"></i> Run Router Gateway
+          </button>
+        </div>
+
+        <!-- Interactive Cascade Visualizer -->
+        <div class="panel-card">
+          <h2>Active Routing Cascade Audit</h2>
+          <div class="visualizer-container" id="visualizer-list">
+            <div style="color: var(--color-text-muted); text-align: center; padding: 2rem;">
+              Submit a prompt to inspect live evaluation cascades.
+            </div>
+          </div>
+
+          <h2>Accepted Output Response</h2>
+          <div class="result-box">
+            <div id="result-text" class="result-content"></div>
+            <div id="result-placeholder" class="result-placeholder">Outputs will appear here...</div>
+            <div class="result-actions" id="result-feedback-container" style="display:none;">
+              <span style="font-size: 0.8rem; color: var(--color-text-muted); display:flex; align-items:center;">Rate Answer Quality:</span>
+              <button class="feedback-btn up" onclick="submitSandboxFeedback(1.0)">
+                <i class="fa-solid fa-thumbs-up"></i> Thumbs Up
+              </button>
+              <button class="feedback-btn down" onclick="submitSandboxFeedback(0.0)">
+                <i class="fa-solid fa-thumbs-down"></i> Thumbs Down
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Policy Config Plane -->
+    <div id="tab-policies" class="tab-panel">
+      <div class="panel-card">
+        <h2>Manual Confidence Routing Policy Adjustments</h2>
+        <p style="color: var(--color-text-muted); margin-bottom: 1.5rem; font-size: 0.9rem;">
+          Define the minimum confidence criteria that model generations must satisfy before returning to client requests. High values force the router to escalate to more reasoning/expensive tiers.
+        </p>
+        <div class="policy-list" id="policy-slider-list">
+          <!-- Policy Sliders will load here dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: History Logs -->
+    <div id="tab-logs" class="tab-panel">
+      <div class="logs-table-container">
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Prompt (Input)</th>
+              <th>Final Tier</th>
+              <th>Total Cost</th>
+              <th>Total Latency</th>
+              <th>Feedback</th>
+            </tr>
+          </thead>
+          <tbody id="logs-table-body">
+            <!-- Logs load here dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Scripts -->
+  <script src="app.js"></script>
+</body>
+</html>
