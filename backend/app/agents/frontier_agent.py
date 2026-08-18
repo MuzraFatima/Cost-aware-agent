@@ -5,11 +5,21 @@ from typing import Dict, Any, List, Optional
 from backend.app.agents.base import BaseAgent
 from backend.app.core.config import settings
 from backend.app.utils.cost_tracker import calculate_token_cost
+from backend.app.agents._mock_answers import resolve as _mock_resolve
+import backend.app.utils.llm_client  # propagates provider keys to LiteLLM at import time
 
 class FrontierAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, model: Optional[str] = None):
         super().__init__(name="Frontier Single Agent", tier=3)
-        self.model = settings.TIER_3_MODEL
+        self._model = model
+
+    @property
+    def model(self) -> str:
+        return self._model or settings.TIER_3_MODEL
+
+    @model.setter
+    def model(self, value: str):
+        self._model = value
 
     async def execute(
         self,
@@ -20,11 +30,12 @@ class FrontierAgent(BaseAgent):
         start_time = time.time()
         formatted_messages = messages or [{"role": "user", "content": prompt}]
         
-        # Check if we are running in mock mode
-        if settings.OPENAI_API_KEY == "mock-openai-key":
+        # Mock mode — active when no real provider key is configured
+        if settings.is_mock_mode:
             return self._execute_mock(prompt, expected_format, start_time)
             
         try:
+            backend.app.utils.llm_client._push_keys()
             response = await litellm.acompletion(
                 model=self.model,
                 messages=formatted_messages,
@@ -32,9 +43,11 @@ class FrontierAgent(BaseAgent):
                 max_tokens=1000
             )
             
-            text = response.choices[0].message.content
-            tokens_in = response.usage.prompt_tokens
-            tokens_out = response.usage.completion_tokens
+            choice = response.choices[0] if getattr(response, "choices", None) else None
+            text = (choice.message.content if choice and hasattr(choice, "message") and hasattr(choice.message, "content") else "") or ""
+            usage = getattr(response, "usage", None)
+            tokens_in = getattr(usage, "prompt_tokens", 0) if usage else (len(prompt.split()) + 5)
+            tokens_out = getattr(usage, "completion_tokens", 0) if usage else (len(text.split()) + 5)
             cost = calculate_token_cost(self.model, tokens_in, tokens_out)
             
             return {
@@ -61,22 +74,10 @@ class FrontierAgent(BaseAgent):
         prompt_lower = prompt.lower()
         
         # Generates highly accurate, structured outputs with zero uncertainty keywords
-        if "json" in prompt_lower or expected_format == "json":
-            text = json.dumps({
-                "status": "success",
-                "message": "This is a clean, structural response from the frontier agent.",
-                "data": {
-                    "action": "completed",
-                    "code": 200,
-                    "execution_path": "Tier 3 Frontier"
-                }
-            }, indent=2)
-        elif "math" in prompt_lower or "compute" in prompt_lower:
-            text = "The math calculation for 123 * 45 equals exactly 5535. The verification is complete."
-        elif "PII" in prompt_lower:
+        if "PII" in prompt or "pii" in prompt_lower:
             text = "I have detected requested identifiers. Per security policies, PII is redacted: [REDACTED_EMAIL], [REDACTED_PHONE]."
         else:
-            text = "I have processed your query and confirmed that the requested operation is fully completed and verified."
+            text = _mock_resolve(prompt, expected_format, tier=self.tier)
             
         tokens_in = len(prompt.split()) + 5
         tokens_out = len(text.split()) + 5

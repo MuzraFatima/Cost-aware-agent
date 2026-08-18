@@ -51,16 +51,19 @@ def calculate_token_cost(model_name: str, input_tokens: int, output_tokens: int)
             
     # LiteLLM cost lookup fallback if not in local map
     try:
-        # LiteLLM cost calculation logic
-        input_cost, output_cost = litellm.get_max_logging_cost(
+        # cost_per_token returns (input_cost, output_cost) as floats
+        input_cost, output_cost = litellm.cost_per_token(
             model=model_name,
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens
         )
-        return float(input_cost + output_cost)
+        total = float(input_cost) + float(output_cost)
+        if total >= 0.0:
+            return total
     except Exception:
-        # Return a conservative estimate if lookup fails entirely
-        return (input_tokens * (1.0 / 1_000_000)) + (output_tokens * (5.0 / 1_000_000))
+        pass
+    # Return a conservative estimate if lookup fails entirely
+    return (input_tokens * (1.0 / 1_000_000)) + (output_tokens * (5.0 / 1_000_000))
 
 def get_response_cost(response_obj: Any) -> float:
     """

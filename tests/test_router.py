@@ -290,3 +290,64 @@ async def test_budget_limit_stops_escalation():
     assert usage["budget_exceeded"] is True, "budget_exceeded flag should be True"
     # With budget enforced at Tier 1, should NOT escalate past Tier 1
     assert result["final_tier"] == 1, "Router should stop at Tier 1 when budget is hit"
+
+async def test_mock_answers_meaningful_resolution():
+    """Verify that _mock_answers.resolve produces meaningful responses for arbitrary prompts."""
+    from backend.app.agents._mock_answers import resolve
+    import json
+
+    # 1. World capital
+    ans = resolve("What is the capital of Italy?")
+    assert "Rome" in ans
+
+    # 2. Math percentage & calculation
+    math_ans = resolve("what is 20 percent of 500?")
+    assert "100" in math_ans
+
+    # 3. Square root
+    sqrt_ans = resolve("what is the square root of 144?")
+    assert "12" in sqrt_ans
+
+    # 4. Coding request
+    code_ans = resolve("write a python function to check if a number is prime")
+    assert "def " in code_ans
+    assert "```python" in code_ans
+
+    # 5. Explanatory question about JSON (should NOT return generic mock JSON)
+    json_expl = resolve("What is JSON and why is it used?")
+    assert "JavaScript Object Notation" in json_expl or "JSON" in json_expl
+    assert not json_expl.strip().startswith("{")
+
+    # 6. Explicit JSON generation request
+    json_out = resolve("Generate a JSON configuration for my database", expected_format="json")
+    parsed = json.loads(json_out)
+    assert parsed.get("status") == "success"
+
+    # 7. Open-ended instructional prompt
+    guide_ans = resolve("How to build a distributed cache system?")
+    assert "step-by-step guide" in guide_ans.lower() or "distributed cache" in guide_ans.lower()
+
+    # 8. Creative prompt
+    poem_ans = resolve("Write a short poem about the night sky")
+    assert "poem" in poem_ans.lower() or "sky" in poem_ans.lower()
+
+async def test_router_sandbox_mock_generates_meaningful_final_response():
+    """Verify end-to-end router execution returns meaningful content instead of generic placeholders."""
+    # Run a factual question through router in mock mode
+    result = await router_engine.route(
+        prompt="What is the capital of Australia?",
+        domain="general"
+    )
+    assert "Canberra" in result["text"]
+    assert result["final_tier"] == 1
+
+    # Run a coding question through router in mock mode
+    code_res = await router_engine.route(
+        prompt="Write a Python function to compute fibonacci numbers",
+        domain="coding",
+        expected_format="python"
+    )
+    assert "def " in code_res["text"]
+    assert "fibonacci" in code_res["text"]
+    assert code_res["final_tier"] >= 1
+

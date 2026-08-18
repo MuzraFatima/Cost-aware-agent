@@ -44,10 +44,12 @@ async function fetchSummary() {
     const res = await fetch(`${API_BASE}/analytics/summary`);
     const data = await res.json();
     
+    document.getElementById("kpi-requests").innerText = data.total_requests.toLocaleString();
     document.getElementById("kpi-cost").innerText = `$${data.total_cost_spent.toFixed(5)}`;
     document.getElementById("kpi-savings").innerText = `$${data.cost_saved_vs_frontier_only.toFixed(5)}`;
     document.getElementById("kpi-latency").innerText = `${data.average_latency_ms} ms`;
     document.getElementById("kpi-confidence").innerText = data.average_confidence.toFixed(2);
+    document.getElementById("kpi-escalation").innerText = `${(data.escalation_rate * 100).toFixed(1)}%`;
     
     updateDistributionChart(data.tier_distribution);
   } catch (error) {
@@ -122,7 +124,7 @@ async function fetchLogs() {
     tbody.innerHTML = "";
     
     if (logs.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--color-text-muted);">No records found. Run a prompt in the Sandbox first!</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--color-text-muted);">No records found. Run a prompt in the Sandbox first!</td></tr>`;
       updateSavingsChart([]);
       return;
     }
@@ -130,15 +132,22 @@ async function fetchLogs() {
     logs.forEach(log => {
       const dateStr = new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       
+      // Build escalation path badge string
+      const pathBadges = (log.escalation_path || [log.final_tier]).map(t =>
+        `<span class="tier-pill t${t}">T${t}</span>`
+      ).join(" <span style='color:var(--color-text-muted)'>→</span> ");
+
       const row = document.createElement("tr");
       row.onclick = () => toggleRowDetails(log.id);
       row.id = `row-${log.id}`;
       row.innerHTML = `
         <td>${dateStr}</td>
-        <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(log.prompt)}</td>
+        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(log.prompt)}</td>
         <td><span class="tier-pill t${log.final_tier}">Tier ${log.final_tier}</span></td>
+        <td>${pathBadges}</td>
         <td>$${log.total_cost.toFixed(5)}</td>
         <td>${log.total_latency_ms} ms</td>
+        <td style="max-width: 200px; font-size: 0.78rem; color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(log.routing_reason || '')}">${escapeHtml(log.routing_reason || '—')}</td>
         <td>${log.eval_score !== null ? (log.eval_score === 1.0 ? '<i class="fa-solid fa-thumbs-up" style="color: var(--color-success)"></i>' : '<i class="fa-solid fa-thumbs-down" style="color: var(--color-error)"></i>') : '<span style="color: var(--color-text-muted)">-</span>'}</td>
       `;
       tbody.appendChild(row);
@@ -151,16 +160,25 @@ async function fetchLogs() {
       
       let stepTraceHtml = "";
       log.steps.forEach((step, idx) => {
+        const isLastStep = idx === log.steps.length - 1;
+        const stepStatusColor = isLastStep ? "var(--color-success)" : "var(--color-warning)";
+        const stepStatusLabel = isLastStep ? "✓ Accepted" : "↑ Escalated";
         stepTraceHtml += `
           <div class="step-trace-item">
             <span><strong>Step ${idx + 1}: Tier ${step.tier}</strong> (${step.model_name})</span>
-            <span>Conf: <strong>${step.confidence_score.toFixed(2)}</strong> | Cost: $${step.cost.toFixed(5)} | Latency: ${step.latency_ms}ms</span>
+            <span style="display:flex; gap:0.75rem; align-items:center;">
+              Conf: <strong>${step.confidence_score.toFixed(3)}</strong>
+              | Cost: $${step.cost.toFixed(5)}
+              | Latency: ${step.latency_ms}ms
+              | Tokens: ${step.tokens_input}↑/${step.tokens_output}↓
+              <span style="color:${stepStatusColor}; font-weight:700;">${stepStatusLabel}</span>
+            </span>
           </div>
         `;
       });
       
       detailRow.innerHTML = `
-        <td colspan="6">
+        <td colspan="8">
           <div class="log-expanded-details">
             <div class="expanded-grid">
               <div class="expanded-item">
@@ -169,6 +187,9 @@ async function fetchLogs() {
                 
                 <h4 style="margin-top: 1rem;">Response Output</h4>
                 <div class="expanded-text-block">${escapeHtml(log.response || "")}</div>
+
+                <h4 style="margin-top: 1rem;">Routing Reason</h4>
+                <div class="expanded-text-block" style="font-style: italic; color: var(--color-text-muted);">${escapeHtml(log.routing_reason || '—')}</div>
               </div>
               <div class="expanded-item">
                 <h4>Routing Cascade Trace</h4>
@@ -268,6 +289,22 @@ async function submitSandboxPrompt() {
       `;
       visualizerContainer.appendChild(stepRow);
     });
+
+    // Populate Sandbox Result Summary panel
+    const lastStep = result.usage.routing_path[result.usage.routing_path.length - 1];
+    const escalationPath = result.usage.routing_path.map(s => `Tier ${s.tier}`).join(" → ");
+    const routingReason = result.usage.routing_path.length === 1
+      ? `Resolved at Tier ${result.final_tier} — confidence threshold met on first attempt`
+      : `Escalated through ${escalationPath} — lower tiers did not meet confidence threshold`;
+
+    document.getElementById("ss-tier").innerHTML = `<span class="tier-pill t${result.final_tier}">Tier ${result.final_tier}</span>`;
+    document.getElementById("ss-confidence").innerText = lastStep ? lastStep.confidence_score.toFixed(3) : "—";
+    document.getElementById("ss-threshold").innerText = result.threshold_used.toFixed(2);
+    document.getElementById("ss-cost").innerText = `$${result.usage.total_cost_usd.toFixed(6)}`;
+    document.getElementById("ss-latency").innerText = `${result.usage.total_latency_ms} ms`;
+    document.getElementById("ss-path").innerText = escalationPath;
+    document.getElementById("ss-reason").innerText = routingReason;
+    document.getElementById("sandbox-result-summary").style.display = "block";
     
     // Set output text
     document.getElementById("result-text").innerText = result.text;

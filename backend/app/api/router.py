@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from typing import List, Dict, Any, Optional
@@ -10,15 +10,43 @@ from backend.app.core.router_engine import router_engine
 
 router = APIRouter()
 
+_VALID_DOMAINS = {"general", "coding", "math", "creative"}
+_VALID_FORMATS = {"json", "python"}
+
 class CompletionRequest(BaseModel):
     prompt: str = Field(..., description="The user query prompt")
-    domain: str = Field("general", description="The query domain (e.g. coding, math, general, creative)")
-    expected_format: Optional[str] = Field(None, description="Expected response format (e.g. 'json', 'python')")
+    domain: str = Field("general", description="The query domain (general, coding, math, creative)")
+    expected_format: Optional[str] = Field(None, description="Expected response format: 'json' or 'python'")
     budget_limit_usd: Optional[float] = Field(
         None,
         ge=0.0,
         description="Optional per-request budget cap in USD. Routing stops escalating once this cost is reached."
     )
+
+    @field_validator("prompt")
+    @classmethod
+    def prompt_must_not_be_blank(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Prompt must not be empty or whitespace-only")
+        return v.strip()
+
+    @field_validator("domain")
+    @classmethod
+    def normalise_domain(cls, v: str) -> str:
+        normalised = v.strip().lower()
+        if normalised not in _VALID_DOMAINS:
+            return "general"  # safe fallback instead of 400 to stay backward-compatible
+        return normalised
+
+    @field_validator("expected_format")
+    @classmethod
+    def validate_format(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        normalised = v.strip().lower()
+        if normalised not in _VALID_FORMATS:
+            raise ValueError(f"expected_format must be one of {sorted(_VALID_FORMATS)} or null")
+        return normalised
 
 class FeedbackRequest(BaseModel):
     routing_log_id: str = Field(..., description="ID of the completed routing log")
@@ -34,12 +62,6 @@ async def create_completion(
     Evaluates prompt complexity, runs agent cascade based on confidence thresholds,
     records execution paths, and outputs response.
     """
-    if not request.prompt.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Prompt cannot be empty"
-        )
-        
     try:
         result = await router_engine.route(
             prompt=request.prompt,

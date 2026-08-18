@@ -50,7 +50,18 @@
       <div class="kpi-grid">
         <div class="kpi-card">
           <div class="kpi-header">
-            <span>Aggregated Cost spent</span>
+            <span>Total Requests</span>
+            <div class="kpi-icon" style="background: rgba(16, 185, 129, 0.15); color: var(--color-success);">
+              <i class="fa-solid fa-bolt"></i>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpi-requests">0</div>
+          <div class="kpi-desc">All-time routed queries</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span>Aggregated Cost Spent</span>
             <div class="kpi-icon" style="background: rgba(99, 102, 241, 0.15); color: var(--color-primary);">
               <i class="fa-solid fa-receipt"></i>
             </div>
@@ -72,6 +83,17 @@
 
         <div class="kpi-card">
           <div class="kpi-header">
+            <span>Avg Step Confidence</span>
+            <div class="kpi-icon" style="background: rgba(245, 158, 11, 0.15); color: var(--color-warning);">
+              <i class="fa-solid fa-shield-halved"></i>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpi-confidence">0.00</div>
+          <div class="kpi-desc">Accepted output confidence level</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-header">
             <span>Average Latency</span>
             <div class="kpi-icon" style="background: rgba(6, 182, 212, 0.15); color: var(--color-secondary);">
               <i class="fa-solid fa-gauge-high"></i>
@@ -83,13 +105,13 @@
 
         <div class="kpi-card">
           <div class="kpi-header">
-            <span>Avg Step Confidence</span>
-            <div class="kpi-icon" style="background: rgba(245, 158, 11, 0.15); color: var(--color-warning);">
-              <i class="fa-solid fa-shield-halved"></i>
+            <span>Escalation Rate</span>
+            <div class="kpi-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--color-error);">
+              <i class="fa-solid fa-arrow-trend-up"></i>
             </div>
           </div>
-          <div class="kpi-value" id="kpi-confidence">0.00</div>
-          <div class="kpi-desc">Accepted output confidence level</div>
+          <div class="kpi-value" id="kpi-escalation">0%</div>
+          <div class="kpi-desc">Requests escalated past Tier 1</div>
         </div>
       </div>
 
@@ -158,6 +180,41 @@
             </div>
           </div>
 
+          <!-- Sandbox Result Summary -->
+          <div id="sandbox-result-summary" style="display:none; margin-bottom: 1rem;">
+            <h2 style="margin-bottom: 0.75rem;">Routing Decision Summary</h2>
+            <div class="sandbox-summary-grid">
+              <div class="summary-metric">
+                <div class="summary-label"><i class="fa-solid fa-layer-group"></i> Selected Tier</div>
+                <div class="summary-value" id="ss-tier">—</div>
+              </div>
+              <div class="summary-metric">
+                <div class="summary-label"><i class="fa-solid fa-shield-halved"></i> Confidence</div>
+                <div class="summary-value" id="ss-confidence">—</div>
+              </div>
+              <div class="summary-metric">
+                <div class="summary-label"><i class="fa-solid fa-sliders"></i> Threshold</div>
+                <div class="summary-value" id="ss-threshold">—</div>
+              </div>
+              <div class="summary-metric">
+                <div class="summary-label"><i class="fa-solid fa-receipt"></i> Total Cost</div>
+                <div class="summary-value" id="ss-cost">—</div>
+              </div>
+              <div class="summary-metric">
+                <div class="summary-label"><i class="fa-solid fa-gauge-high"></i> Latency</div>
+                <div class="summary-value" id="ss-latency">—</div>
+              </div>
+              <div class="summary-metric" style="grid-column: 1 / -1;">
+                <div class="summary-label"><i class="fa-solid fa-route"></i> Escalation Path</div>
+                <div class="summary-value" id="ss-path">—</div>
+              </div>
+              <div class="summary-metric" style="grid-column: 1 / -1;">
+                <div class="summary-label"><i class="fa-solid fa-circle-info"></i> Routing Reason</div>
+                <div class="summary-value" id="ss-reason" style="font-size: 0.8rem; color: var(--color-text-muted);">—</div>
+              </div>
+            </div>
+          </div>
+
           <h2>Accepted Output Response</h2>
           <div class="result-box">
             <div id="result-text" class="result-content"></div>
@@ -198,8 +255,10 @@
               <th>Timestamp</th>
               <th>Prompt (Input)</th>
               <th>Final Tier</th>
+              <th>Escalation Path</th>
               <th>Total Cost</th>
               <th>Total Latency</th>
+              <th>Routing Reason</th>
               <th>Feedback</th>
             </tr>
           </thead>

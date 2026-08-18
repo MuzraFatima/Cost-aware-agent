@@ -25,6 +25,7 @@ def get_analytics_summary(db: Session = Depends(get_db)):
             "cost_saved_vs_frontier_only": 0.00,
             "average_latency_ms": 0,
             "average_confidence": 0.00,
+            "escalation_rate": 0.00,
             "tier_distribution": {
                 "tier_1": 0.0,
                 "tier_2": 0.0,
@@ -61,7 +62,11 @@ def get_analytics_summary(db: Session = Depends(get_db)):
             select(func.count(RoutingLog.id)).where(RoutingLog.final_tier == t)
         )
         tier_counts[t] = res.scalar() or 0
-        
+
+    # 5. Escalation rate: % of requests that escalated beyond Tier 1
+    escalated_count = sum(tier_counts[t] for t in [2, 3, 4])
+    escalation_rate = round(escalated_count / total_requests, 4) if total_requests > 0 else 0.0
+
     tier_dist = {
         f"tier_{t}": round(tier_counts[t] / total_requests, 2) if total_requests > 0 else 0.0
         for t in [1, 2, 3, 4]
@@ -74,6 +79,7 @@ def get_analytics_summary(db: Session = Depends(get_db)):
         "cost_saved_vs_frontier_only": round(total_savings, 6),
         "average_latency_ms": avg_latency,
         "average_confidence": round(avg_confidence, 2),
+        "escalation_rate": escalation_rate,
         "tier_distribution": tier_dist
     }
 
@@ -98,6 +104,12 @@ def get_recent_logs(
     for log in logs:
         steps = []
         for step in log.steps:
+            # Determine per-step routing reason
+            is_failed = "FAILED" in step.model_name
+            if is_failed:
+                step_reason = f"Tier {step.tier} failed to execute — escalated automatically"
+            else:
+                step_reason = f"Tier {step.tier} evaluated with confidence {step.confidence_score:.2f}"
             steps.append({
                 "tier": step.tier,
                 "model_name": step.model_name,
@@ -105,9 +117,21 @@ def get_recent_logs(
                 "tokens_input": step.tokens_input,
                 "tokens_output": step.tokens_output,
                 "cost": step.cost,
-                "latency_ms": step.latency_ms
+                "latency_ms": step.latency_ms,
+                "routing_reason": step_reason
             })
-            
+
+        # Build escalation path from step sequence
+        escalation_path = [s["tier"] for s in steps]
+        # Derive routing reason from escalation
+        if len(escalation_path) == 1:
+            routing_reason = f"Resolved at Tier {escalation_path[0]} — confidence threshold met on first attempt"
+        elif len(escalation_path) > 1:
+            path_str = " → ".join(f"Tier {t}" for t in escalation_path)
+            routing_reason = f"Escalated through {path_str} — lower tiers did not meet confidence threshold"
+        else:
+            routing_reason = "No routing steps recorded"
+
         log_list.append({
             "id": log.id,
             "prompt": log.prompt,
@@ -118,6 +142,8 @@ def get_recent_logs(
             "eval_score": log.eval_score,
             "feedback_text": log.feedback_text,
             "created_at": log.created_at.isoformat(),
+            "escalation_path": escalation_path,
+            "routing_reason": routing_reason,
             "steps": steps
         })
         
