@@ -1,6 +1,6 @@
 # Cost-Aware Agent Router (CAAR) — Evaluation & Benchmark Report
 
-*Generated on: `2026-08-18 11:12:35 UTC` | Benchmark Size: `20 queries` across 5 categories*
+*Generated on: `2026-08-18 16:37:38 UTC` | Benchmark Size: `20 queries` across 5 categories*
 
 ## Executive Summary Comparison Table
 
@@ -11,18 +11,18 @@
 | **Total Cost (USD)** | `$0.000358` | `$0.065707` | **`$0.009928`** |
 | **Avg Cost / Query** | `$0.000018` | `$0.003285` | **`$0.000496`** |
 | **Cost Savings vs T4** | `99.5%` ($0.065349) | `0.0%` ($0.00) | **`84.9%`** ($0.055779) |
-| **Avg Latency (ms)** | `401 ms` | `2002 ms` | **`981 ms`** |
+| **Avg Latency (ms)** | `403 ms` | `2002 ms` | **`985 ms`** |
 | **Escalation Rate** | `0.0%` (Fixed) | `0.0%` (Fixed) | **`15.0%`** (Dynamic) |
 
 ## Category-Wise Breakdown
 
 | Category | Tier 1 Accuracy | Highest-Tier Accuracy | CAAR Accuracy | CAAR Avg Cost | CAAR Avg Latency |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Coding** | `100%` | `100%` | **`100%`** | `$0.000986` | `1202 ms` |
-| **Factual** | `100%` | `100%` | **`100%`** | `$0.000012` | `400 ms` |
-| **Json** | `0%` | `100%` | **`100%`** | `$0.000267` | `1052 ms` |
-| **Mathematics** | `100%` | `100%` | **`100%`** | `$0.000241` | `1201 ms` |
-| **Reasoning** | `100%` | `100%` | **`100%`** | `$0.000976` | `1051 ms` |
+| **Coding** | `100%` | `100%` | **`100%`** | `$0.000986` | `1206 ms` |
+| **Factual** | `100%` | `100%` | **`100%`** | `$0.000012` | `404 ms` |
+| **Json** | `0%` | `100%` | **`100%`** | `$0.000267` | `1056 ms` |
+| **Mathematics** | `100%` | `100%` | **`100%`** | `$0.000241` | `1204 ms` |
+| **Reasoning** | `100%` | `100%` | **`100%`** | `$0.000976` | `1056 ms` |
 
 ## Key Insights & System Performance
 
