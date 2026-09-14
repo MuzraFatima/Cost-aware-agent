@@ -24,12 +24,14 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = "mock-openai-key"
     ANTHROPIC_API_KEY: str = "mock-anthropic-key"
     GEMINI_API_KEY: str = "mock-gemini-key"
+    GROQ_API_KEY: str = "mock-groq-key"
 
     # Model per tier — overridable via env / .env
-    TIER_1_MODEL: str = "gpt-4o-mini"
-    TIER_2_MODEL: str = "gpt-4o-mini"
-    TIER_3_MODEL: str = "gpt-4o"
-    TIER_4_MODEL: str = "gpt-4o"
+    TIER_1_MODEL: str = "groq/openai/gpt-oss-20b"
+    TIER_2_MODEL: str = "groq/openai/gpt-oss-20b"
+    TIER_3_MODEL: str = "groq/openai/gpt-oss-120b"
+    TIER_4_MODEL: str = "groq/openai/gpt-oss-120b"
+
 
     # Default confidence thresholds per domain
     DEFAULT_THRESHOLDS: Dict[str, float] = {
@@ -49,10 +51,13 @@ class Settings(BaseSettings):
         The system falls back to deterministic mock responses in this mode.
         Agents should use this instead of hard-coding key string comparisons.
         """
-        no_openai    = self.OPENAI_API_KEY    in ("", "mock-openai-key")
-        no_anthropic = self.ANTHROPIC_API_KEY in ("", "mock-anthropic-key")
-        no_gemini    = self.GEMINI_API_KEY    in ("", "mock-gemini-key")
-        return no_openai and no_anthropic and no_gemini
+        no_openai    = self.OPENAI_API_KEY    in ("", "mock-openai-key", "sk-...")
+        no_anthropic = self.ANTHROPIC_API_KEY in ("", "mock-anthropic-key", "sk-ant-...")
+        no_gemini    = self.GEMINI_API_KEY    in ("", "mock-gemini-key", "AI...")
+        no_groq      = self.GROQ_API_KEY      in ("", "mock-groq-key", "gsk_...")
+        return no_openai and no_anthropic and no_gemini and no_groq
+
+
 
     model_config = SettingsConfigDict(
         # Load a .env file from the project root when present.

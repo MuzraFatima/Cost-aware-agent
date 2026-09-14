@@ -49,7 +49,29 @@ def _push_keys() -> None:
         os.environ["GEMINI_API_KEY"] = settings.GEMINI_API_KEY
         os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
 
+    # Groq
+    if settings.GROQ_API_KEY and settings.GROQ_API_KEY != "mock-groq-key":
+        litellm.groq_key = settings.GROQ_API_KEY
+        os.environ["GROQ_API_KEY"] = settings.GROQ_API_KEY
+
+
+
+def format_model_name(model_name: str) -> str:
+    """
+    Ensures model names are properly prefixed for LiteLLM.
+    If GROQ_API_KEY is configured and model starts with openai/gpt-oss- or is a Groq model,
+    prefixes with groq/ so LiteLLM routes to Groq API instead of OpenAI.
+    """
+    if not model_name:
+        return model_name
+    if settings.GROQ_API_KEY and settings.GROQ_API_KEY != "mock-groq-key":
+        if model_name.startswith("openai/gpt-oss-") or model_name.startswith("gpt-oss-"):
+            if not model_name.startswith("groq/"):
+                return f"groq/{model_name}"
+    return model_name
+
 
 # Run once at import time
 _push_keys()
+
 

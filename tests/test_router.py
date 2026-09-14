@@ -160,14 +160,24 @@ async def test_simple_high_confidence_query():
 
 async def test_invalid_json_escalated():
     """Scenario 2: Invalid JSON formatting fails syntactic checks and gets escalated."""
-    result = await router_engine.route(
-        prompt="Output configuration JSON",
-        domain="general", # general domain so it starts at Tier 1
-        expected_format="json"
-    )
-    assert result["final_tier"] >= 2
-    steps = result["usage"]["routing_path"]
-    assert steps[0]["confidence_score"] <= 0.2
+    with patch.object(router_engine.agents[1], 'execute', return_value={
+        "text": '{ "status": "incomplete", "message": "Demo',
+        "model_name": "groq/openai/gpt-oss-20b",
+        "tokens_input": 10,
+        "tokens_output": 10,
+        "cost": 0.0001,
+        "latency_ms": 100,
+        "tier": 1
+    }):
+        result = await router_engine.route(
+            prompt="Output configuration JSON",
+            domain="general",
+            expected_format="json"
+        )
+        assert result["final_tier"] >= 2
+        steps = result["usage"]["routing_path"]
+        assert steps[0]["confidence_score"] <= 0.2
+
 
 async def test_hedging_response_escalated():
     """Scenario 3: Uncertain or hedging responses drop confidence below threshold and get escalated."""
@@ -348,6 +358,69 @@ async def test_router_sandbox_mock_generates_meaningful_final_response():
         expected_format="python"
     )
     assert "def " in code_res["text"]
-    assert "fibonacci" in code_res["text"]
+    assert "fibonacci" in code_res["text"].lower()
     assert code_res["final_tier"] >= 1
+
+
+async def test_phase2_task_classification_and_complexity_scoring():
+    """Verify task classification across 6 categories and complexity scoring logic."""
+    # 1. General Q&A
+    t_gen = router_engine.classify_task_type("What is Python?")
+    c_gen = router_engine.calculate_complexity_score("What is Python?", t_gen)
+    assert t_gen == "general"
+    assert c_gen <= 3
+
+    # 2. Coding
+    t_code = router_engine.classify_task_type("Write a Python program to sort a list.")
+    c_code = router_engine.calculate_complexity_score("Write a Python program to sort a list.", t_code)
+    assert t_code == "coding"
+    assert 4 <= c_code <= 6
+
+    # 3. Math
+    t_math = router_engine.classify_task_type("Derive the formula for calculating matrix determinants.")
+    c_math = router_engine.calculate_complexity_score("Derive the formula for calculating matrix determinants.", t_math)
+    assert t_math == "math"
+    assert c_math >= 5
+
+    # 4. Research / Architecture
+    t_res = router_engine.classify_task_type("Design a complex multi-agent reinforcement learning system.")
+    c_res = router_engine.calculate_complexity_score("Design a complex multi-agent reinforcement learning system.", t_res)
+    assert t_res == "research"
+    assert c_res >= 7
+
+    # 5. Analysis
+    t_ana = router_engine.classify_task_type("Analyze log dataset and summarize performance metrics.")
+    c_ana = router_engine.calculate_complexity_score("Analyze log dataset and summarize performance metrics.", t_ana)
+    assert t_ana == "analysis"
+
+    # 6. Creative
+    t_cre = router_engine.classify_task_type("Write a poem about quantum computing.")
+    c_cre = router_engine.calculate_complexity_score("Write a poem about quantum computing.", t_cre)
+    assert t_cre == "creative"
+
+
+async def test_phase2_acceptance_criteria_routing_decisions():
+    """Verify acceptance criteria requirements for Phase 2 distinct routing decisions."""
+    # Prompt 1: Simple question
+    p1 = await router_engine.route("What is Python?")
+    assert p1["task_type"] == "general"
+    assert p1["complexity_score"] <= 3
+    assert p1["final_tier"] == 1
+    assert "routing_reason" in p1
+
+    # Prompt 2: Medium coding question
+    p2 = await router_engine.route("Write a Python program to sort a list.")
+    assert p2["task_type"] == "coding"
+    assert 4 <= p2["complexity_score"] <= 6
+    assert p2["final_tier"] >= 2
+    assert "routing_reason" in p2
+
+    # Prompt 3: Complex research question
+    p3 = await router_engine.route("Design a complex multi-agent reinforcement learning system.")
+    assert p3["task_type"] in ("research", "coding")
+    assert p3["complexity_score"] >= 7
+    assert p3["final_tier"] >= 3
+    assert "routing_reason" in p3
+
+
 

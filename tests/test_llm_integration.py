@@ -26,21 +26,23 @@ from unittest.mock import patch
 def test_mock_mode_is_default():
     """
     settings.is_mock_mode must be True in the default test environment
-    (i.e., when no real provider key is set).
+    (i.e., when all provider keys are at their placeholder defaults).
     """
     from backend.app.core.config import settings
 
-    # Sanity-check the placeholder values used in CI
-    assert settings.OPENAI_API_KEY    in ("", "mock-openai-key"),    \
-        "OPENAI_API_KEY is set to a real value — is_mock_mode will be False in CI"
-    assert settings.ANTHROPIC_API_KEY in ("", "mock-anthropic-key"), \
-        "ANTHROPIC_API_KEY is set to a real value — is_mock_mode will be False in CI"
-    assert settings.GEMINI_API_KEY    in ("", "mock-gemini-key"),    \
-        "GEMINI_API_KEY is set to a real value — is_mock_mode will be False in CI"
+    with patch.object(settings, "OPENAI_API_KEY", "mock-openai-key"), \
+         patch.object(settings, "ANTHROPIC_API_KEY", "mock-anthropic-key"), \
+         patch.object(settings, "GEMINI_API_KEY", "mock-gemini-key"), \
+         patch.object(settings, "GROQ_API_KEY", "mock-groq-key"):
 
-    assert settings.is_mock_mode is True, (
-        "settings.is_mock_mode should be True when all keys are at their placeholder defaults"
-    )
+        assert settings.OPENAI_API_KEY in ("", "mock-openai-key", "sk-...")
+        assert settings.ANTHROPIC_API_KEY in ("", "mock-anthropic-key", "sk-ant-...")
+        assert settings.GEMINI_API_KEY in ("", "mock-gemini-key", "AI...")
+        assert settings.GROQ_API_KEY in ("", "mock-groq-key", "gsk_...")
+        assert settings.is_mock_mode is True, (
+            "settings.is_mock_mode should be True when all keys are at their placeholder defaults"
+        )
+
 
 
 def test_is_mock_mode_false_when_openai_key_set():
@@ -75,6 +77,19 @@ def test_is_mock_mode_false_when_gemini_key_set():
         OPENAI_API_KEY="mock-openai-key",
         ANTHROPIC_API_KEY="mock-anthropic-key",
         GEMINI_API_KEY="AIzaSy-real-key",
+        GROQ_API_KEY="mock-groq-key",
+    )
+    assert patched.is_mock_mode is False
+
+
+def test_is_mock_mode_false_when_groq_key_set():
+    from backend.app.core.config import Settings
+
+    patched = Settings(
+        OPENAI_API_KEY="mock-openai-key",
+        ANTHROPIC_API_KEY="mock-anthropic-key",
+        GEMINI_API_KEY="mock-gemini-key",
+        GROQ_API_KEY="gsk_real-key-example",
     )
     assert patched.is_mock_mode is False
 
@@ -90,7 +105,7 @@ def test_llm_client_does_not_set_env_for_mock_keys():
     """
     # Ensure the placeholder env vars are not already set as real keys
     env_backup = {k: os.environ.pop(k, None)
-                  for k in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")}
+                  for k in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY")}
     try:
         import backend.app.utils.llm_client  # noqa: F401  (import for side-effect)
         importlib.reload(backend.app.utils.llm_client)
@@ -99,6 +114,7 @@ def test_llm_client_does_not_set_env_for_mock_keys():
         assert os.environ.get("OPENAI_API_KEY")    != "mock-openai-key"
         assert os.environ.get("ANTHROPIC_API_KEY") != "mock-anthropic-key"
         assert os.environ.get("GEMINI_API_KEY")    != "mock-gemini-key"
+        assert os.environ.get("GROQ_API_KEY")      != "mock-groq-key"
     finally:
         # Restore original env
         for k, v in env_backup.items():
@@ -137,3 +153,55 @@ def test_llm_client_sets_env_when_real_openai_key_given():
             os.environ["OPENAI_API_KEY"] = env_backup
         else:
             os.environ.pop("OPENAI_API_KEY", None)
+
+
+def test_llm_client_sets_env_when_real_groq_key_given():
+    """
+    When a real Groq key is injected into settings, llm_client._push_keys()
+    writes it to os.environ and litellm.groq_key.
+    """
+    import litellm
+    import backend.app.utils.llm_client as llm_client_module
+    from backend.app.core.config import settings
+
+    fake_key = "gsk_unittest-fake-groq-key-1234"
+
+    env_backup = os.environ.pop("GROQ_API_KEY", None)
+    orig_litellm_key = getattr(litellm, "groq_key", None)
+
+    try:
+        with patch.object(settings, "GROQ_API_KEY", fake_key):
+            llm_client_module._push_keys()
+
+            assert getattr(litellm, "groq_key", None) == fake_key
+            assert os.environ.get("GROQ_API_KEY") == fake_key
+    finally:
+        litellm.groq_key = orig_litellm_key
+        if env_backup is not None:
+            os.environ["GROQ_API_KEY"] = env_backup
+        else:
+            os.environ.pop("GROQ_API_KEY", None)
+
+
+@pytest.mark.asyncio
+async def test_chat_endpoint_routing():
+    """
+    Verify POST /api/v1/router/chat accepts messages and routes successfully.
+    """
+    from fastapi.testclient import TestClient
+    from backend.app.main import app
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/router/chat",
+        json={
+            "messages": [{"role": "user", "content": "What is the capital of France?"}],
+            "domain": "general"
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "text" in data
+    assert "usage" in data
+    assert data["final_tier"] >= 1
+

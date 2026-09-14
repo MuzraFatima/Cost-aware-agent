@@ -253,15 +253,17 @@ async function submitSandboxPrompt() {
   document.getElementById("result-feedback-container").style.display = "none";
   
   try {
-    const res = await fetch(`${API_BASE}/router/completions`, {
+    const res = await fetch(`${API_BASE}/router/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: promptText,
+        messages: [{ role: "user", content: promptText }],
         domain: domain,
         expected_format: format || null
       })
     });
+
     const result = await res.json();
     
     activeLogIdForFeedback = result.id;
@@ -293,9 +295,10 @@ async function submitSandboxPrompt() {
     // Populate Sandbox Result Summary panel
     const lastStep = result.usage.routing_path[result.usage.routing_path.length - 1];
     const escalationPath = result.usage.routing_path.map(s => `Tier ${s.tier}`).join(" → ");
-    const routingReason = result.usage.routing_path.length === 1
+    const routingReason = result.routing_reason || (result.usage.routing_path.length === 1
       ? `Resolved at Tier ${result.final_tier} — confidence threshold met on first attempt`
-      : `Escalated through ${escalationPath} — lower tiers did not meet confidence threshold`;
+      : `Escalated through ${escalationPath} — lower tiers did not meet confidence threshold`);
+
 
     document.getElementById("ss-tier").innerHTML = `<span class="tier-pill t${result.final_tier}">Tier ${result.final_tier}</span>`;
     document.getElementById("ss-confidence").innerText = lastStep ? lastStep.confidence_score.toFixed(3) : "—";

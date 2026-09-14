@@ -6,7 +6,7 @@ from backend.app.agents.base import BaseAgent
 from backend.app.core.config import settings
 from backend.app.utils.cost_tracker import calculate_token_cost
 from backend.app.agents._mock_answers import resolve as _mock_resolve
-import backend.app.utils.llm_client  # propagates provider keys to LiteLLM at import time
+from backend.app.utils.llm_client import _push_keys, format_model_name
 
 class ConsensusAgent(BaseAgent):
     def __init__(self, model_cheap: Optional[str] = None, model_frontier: Optional[str] = None):
@@ -39,30 +39,29 @@ class ConsensusAgent(BaseAgent):
         start_time = time.time()
         formatted_messages = messages or [{"role": "user", "content": prompt}]
         
-        # Mock mode — active when no real provider key is configured
-        if settings.is_mock_mode:
+        # Mock mode — active when no real provider key is configured or explicitly enabled
+        if getattr(self, "mock_mode", False) or settings.is_mock_mode:
             return self._execute_mock(prompt, expected_format, start_time)
             
         try:
-            backend.app.utils.llm_client._push_keys()
-            # Tier 4 runs a consensus loop:
-            # 1. Call cheap model to generate candidate A
-            # 2. Call frontier model to generate candidate B
-            # 3. Use frontier model to verify candidate answers and output the final verified response.
-            
+            _push_keys()
+            target_cheap = format_model_name(self.model_cheap)
+            target_frontier = format_model_name(self.model_frontier)
+
             # Step 1 & 2: Concurrent requests
             task_a = litellm.acompletion(
-                model=self.model_cheap,
+                model=target_cheap,
                 messages=formatted_messages,
                 temperature=0.7,
                 max_tokens=600
             )
             task_b = litellm.acompletion(
-                model=self.model_frontier,
+                model=target_frontier,
                 messages=formatted_messages,
                 temperature=0.2,
                 max_tokens=600
             )
+
             
             res_a, res_b = await asyncio.gather(task_a, task_b)
             
@@ -90,11 +89,12 @@ Candidate B:
 Output the final compiled response. Ensure there is no hedging, and that it is fully correct and structured.
 """
             res_final = await litellm.acompletion(
-                model=self.model_frontier,
+                model=target_frontier,
                 messages=[{"role": "user", "content": synthesis_prompt}],
                 temperature=0.1,
                 max_tokens=800
             )
+
             
             choice_final = res_final.choices[0] if getattr(res_final, "choices", None) else None
             text = (choice_final.message.content if choice_final and hasattr(choice_final, "message") and hasattr(choice_final.message, "content") else "") or ""

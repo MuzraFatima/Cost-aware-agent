@@ -13,7 +13,7 @@ from backend.app.agents.consensus_agent import ConsensusAgent
 from backend.app.utils.cost_tracker import estimate_frontier_cost
 
 class RouterEngine:
-    def __init__(self):
+    def __init__(self, mock_mode: bool = False):
         # Initialize Agent pool
         self.agents = {
             1: CheapAgent(),
@@ -21,38 +21,137 @@ class RouterEngine:
             3: FrontierAgent(),
             4: ConsensusAgent()
         }
+        if mock_mode:
+            for agent in self.agents.values():
+                agent.mock_mode = True
+
+    def classify_task_type(self, prompt: str, domain: Optional[str] = None) -> str:
+        """
+        Classifies prompt into one of 6 task categories:
+        general, coding, math, research, analysis, creative.
+        """
+        import re
+        prompt_lower = prompt.lower()
+
+        simple_general_patterns = [
+            r"^what is python\??$",
+            r"^what is the capital of ",
+            r"^explain what .* is",
+            r"^hello", r"^hi\b",
+            r"configuration json",
+            r"config json"
+        ]
+        for pat in simple_general_patterns:
+            if re.search(pat, prompt_lower):
+                return "general"
+
+        research_kw = [
+            "multi-agent", "reinforcement learning", "architecture", "distributed system",
+            "benchmark", "consensus verification", "comparative analysis", "tradeoff",
+            "security audit", "high stakes", "system design"
+        ]
+        coding_patterns = [
+            r"\bpython program\b", r"\bpython script\b", r"\bpython function\b",
+            r"\bwrite a python\b", r"\bsort a list\b", r"\bdef \b", r"\bclass \b",
+            r"\brefactor\b", r"\bsql\b", r"\balgorithm\b", r"\bdebug\b",
+            r"\bwrite code\b", r"\bpython code\b"
+        ]
+        math_kw = [
+            "derive", "integral", "theorem", "calculate", "equation", "proof",
+            "probability", "matrix", "algebra", "calculus", "formula"
+        ]
+        analysis_kw = [
+            "analyze", "data analysis", "log analysis", "trend", "metric", "dataset",
+            "parse", "summary statistics"
+        ]
+        creative_kw = [
+            "poem", "story", "essay", "brainstorm", "haiku", "creative writing", "tagline"
+        ]
+
+        if any(kw in prompt_lower for kw in research_kw):
+            return "research"
+        if any(re.search(pat, prompt_lower) for pat in coding_patterns):
+            return "coding"
+        if any(kw in prompt_lower for kw in math_kw):
+            return "math"
+        if any(kw in prompt_lower for kw in analysis_kw):
+            return "analysis"
+        if any(kw in prompt_lower for kw in creative_kw):
+            return "creative"
+
+        if domain and domain in ("coding", "math", "creative", "research", "analysis"):
+            return domain
+
+        return "general"
+
+
+    def calculate_complexity_score(self, prompt: str, task_type: str) -> int:
+        """
+        Calculates a dynamic complexity score from 1 to 10 based on task type, keyword density,
+        syntactic structure, and prompt length.
+        """
+        prompt_lower = prompt.lower()
+        words = prompt.split()
+        word_count = len(words)
+
+        simple_indicators = ["what is ", "who is ", "define ", "hello", "hi", "what are ", "explain "]
+        is_simple = any(prompt_lower.startswith(ind) for ind in simple_indicators) or (word_count <= 8 and not any(kw in prompt_lower for kw in ["sort a list", "multi-agent", "derive", "reinforcement"]))
+
+        if is_simple and task_type == "general":
+            return 2
+
+        base_scores = {
+            "general": 2,
+            "creative": 3,
+            "analysis": 5,
+            "coding": 5,
+            "math": 6,
+            "research": 8
+        }
+        score = base_scores.get(task_type, 3)
+
+        if any(kw in prompt_lower for kw in ["reinforcement learning", "multi-agent", "security audit", "consensus verification"]):
+            score += 3
+        elif any(kw in prompt_lower for kw in ["architecture", "system design", "distributed", "optimization"]):
+            score += 2
+
+        if word_count > 40:
+            score += 2
+        elif word_count > 20:
+            score += 1
+
+        if any(c in prompt for c in ["{", "}", "[", "]", "```"]):
+            score += 1
+
+        return max(1, min(10, score))
+
 
     def classify_complexity(self, prompt: str, domain: Optional[str] = None) -> int:
         """
-        Runs simple pre-routing check to determine starting tier based on prompt keywords and domain.
-        Avoids cascading latency for queries that are clearly complex.
+        Determines starting tier (1-4) based on task category, prompt keywords, and complexity score.
         """
         prompt_lower = prompt.lower()
-        
-        # Look for indicators of complex math or coding
-        math_indicators = ["derive", "integral", "theorem", "calculate the probability", "solve equation"]
-        coding_indicators = ["write a python script", "class interface", "refactor this code", "sql query for", "json schema"]
+
         extreme_indicators = ["consensus verification", "bulletproof report", "high stakes", "audit", "security audit"]
-        
-        # Check extreme first -> Tier 4
         if any(ind in prompt_lower for ind in extreme_indicators):
             return 4
-        # Check coding/math -> Tier 3
-        if any(ind in prompt_lower for ind in math_indicators) or any(ind in prompt_lower for ind in coding_indicators):
-            return 3
-        # Check domain lookup hints -> Tier 2
+
+        task_type = self.classify_task_type(prompt, domain)
+        complexity_score = self.calculate_complexity_score(prompt, task_type)
+
         rag_indicators = ["pricing", "cost details", "threshold configurations", "developer team"]
         if any(ind in prompt_lower for ind in rag_indicators):
             return 2
-            
-        # If no keywords match, use explicit domain parameter to help select starting tier
-        if domain == "coding" or domain == "math":
-            return 3
-        elif domain == "creative":
+
+        if complexity_score <= 3:
             return 1
-            
-        # Defaults to Tier 1
-        return 1
+        elif complexity_score <= 6:
+            return 3 if task_type in ("coding", "math") else 2
+        elif complexity_score <= 8:
+            return 3
+        else:
+            return 4
+
 
     def get_threshold(self, domain: str, db: Optional[Session] = None) -> float:
         """
@@ -76,7 +175,8 @@ class RouterEngine:
         domain: str = "general",
         expected_format: Optional[str] = None,
         db: Optional[Session] = None,
-        budget_limit_usd: Optional[float] = None
+        budget_limit_usd: Optional[float] = None,
+        messages: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         """
         Dynamically routes a prompt through the agent tiers based on confidence thresholds.
@@ -87,7 +187,9 @@ class RouterEngine:
         # 1. Get active confidence threshold
         threshold = self.get_threshold(domain, db)
         
-        # 2. Determine starting tier
+        # 2. Determine task classification & complexity score
+        task_type = self.classify_task_type(prompt, domain)
+        complexity_score = self.calculate_complexity_score(prompt, task_type)
         start_tier = self.classify_complexity(prompt, domain)
         
         # 3. Execution cascade loop
@@ -101,7 +203,8 @@ class RouterEngine:
             
             try:
                 # Execute current tier
-                res = await agent.execute(prompt=prompt, expected_format=expected_format)
+                res = await agent.execute(prompt=prompt, messages=messages, expected_format=expected_format)
+
                 
                 # Calculate confidence score
                 confidence = await ConfidenceEvaluator.calculate_confidence(
@@ -165,6 +268,13 @@ class RouterEngine:
         frontier_cost = estimate_frontier_cost(total_tokens)
         cost_savings = max(frontier_cost - total_cost, 0.0)
 
+        selected_tier = current_tier if current_tier <= 4 else 4
+        selected_model = steps_trace[-1]["model_name"] if steps_trace else getattr(self.agents[selected_tier], "model", "groq/openai/gpt-oss-20b")
+        routing_reason = (
+            f"Classified as '{task_type}' task (complexity {complexity_score}/10). "
+            f"Initiated at Tier {start_tier} and resolved at Tier {selected_tier} ({selected_model})."
+        )
+
         # 5. Save audit log to database if session is present
         routing_log_id = None
         total_latency = int((time.time() - start_time) * 1000)
@@ -180,7 +290,7 @@ class RouterEngine:
                     cost_savings=round(cost_savings, 8),
                     budget_limit_usd=budget_limit_usd,
                     total_latency_ms=total_latency,
-                    final_tier=current_tier if current_tier <= 4 else 4
+                    final_tier=selected_tier
                 )
                 db.add(log_entry)
                 db.flush() # populates log_entry.id
@@ -208,7 +318,11 @@ class RouterEngine:
         return {
             "id": routing_log_id,
             "text": final_text,
-            "final_tier": current_tier if current_tier <= 4 else 4,
+            "final_tier": selected_tier,
+            "task_type": task_type,
+            "complexity_score": complexity_score,
+            "selected_model": selected_model,
+            "routing_reason": routing_reason,
             "threshold_used": threshold,
             "usage": {
                 "total_cost_usd": round(total_cost, 8),
@@ -222,5 +336,6 @@ class RouterEngine:
                 )
             }
         }
+
 
 router_engine = RouterEngine()

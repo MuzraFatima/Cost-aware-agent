@@ -10,8 +10,9 @@ from backend.app.core.router_engine import router_engine
 
 router = APIRouter()
 
-_VALID_DOMAINS = {"general", "coding", "math", "creative"}
+_VALID_DOMAINS = {"general", "coding", "math", "creative", "research", "analysis"}
 _VALID_FORMATS = {"json", "python"}
+
 
 class CompletionRequest(BaseModel):
     prompt: str = Field(..., description="The user query prompt")
@@ -48,6 +49,42 @@ class CompletionRequest(BaseModel):
             raise ValueError(f"expected_format must be one of {sorted(_VALID_FORMATS)} or null")
         return normalised
 
+class ChatRequest(BaseModel):
+    messages: Optional[List[Dict[str, str]]] = Field(
+        None,
+        description="List of chat messages [{'role': 'user', 'content': '...'}]"
+    )
+    prompt: Optional[str] = Field(
+        None,
+        description="Optional prompt string (used if messages is omitted)"
+    )
+    domain: str = Field("general", description="The query domain (general, coding, math, creative)")
+    expected_format: Optional[str] = Field(None, description="Expected response format: 'json' or 'python'")
+    budget_limit_usd: Optional[float] = Field(
+        None,
+        ge=0.0,
+        description="Optional per-request budget cap in USD."
+    )
+
+    @field_validator("domain")
+    @classmethod
+    def normalise_domain(cls, v: str) -> str:
+        normalised = v.strip().lower()
+        if normalised not in _VALID_DOMAINS:
+            return "general"
+        return normalised
+
+    @field_validator("expected_format")
+    @classmethod
+    def validate_format(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        normalised = v.strip().lower()
+        if normalised not in _VALID_FORMATS:
+            raise ValueError(f"expected_format must be one of {sorted(_VALID_FORMATS)} or null")
+        return normalised
+
+
 class FeedbackRequest(BaseModel):
     routing_log_id: str = Field(..., description="ID of the completed routing log")
     score: float = Field(..., ge=0.0, le=1.0, description="Feedback evaluation score (0.0 = bad, 1.0 = good)")
@@ -76,6 +113,48 @@ async def create_completion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Routing execution failed: {str(e)}"
         )
+
+@router.post("/chat")
+@router.post("/chat/completions")
+async def create_chat_completion(
+    request: ChatRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Chat completions endpoint. Accepts message history or single prompt,
+    evaluates complexity, routes across agent tiers, and returns execution metrics.
+    """
+    effective_prompt = request.prompt or ""
+    if request.messages and len(request.messages) > 0:
+        user_msgs = [m.get("content", "") for m in request.messages if isinstance(m, dict) and m.get("role") == "user"]
+        if user_msgs:
+            effective_prompt = user_msgs[-1]
+        elif not effective_prompt:
+            last_msg = request.messages[-1]
+            effective_prompt = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
+
+    if not effective_prompt or not effective_prompt.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Prompt or user message content must not be empty or whitespace-only"
+        )
+
+    try:
+        result = await router_engine.route(
+            prompt=effective_prompt.strip(),
+            messages=request.messages,
+            domain=request.domain,
+            expected_format=request.expected_format,
+            db=db,
+            budget_limit_usd=request.budget_limit_usd
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Chat execution failed: {str(e)}"
+        )
+
 
 @router.post("/feedback")
 def submit_feedback(

@@ -151,7 +151,7 @@ async def test_benchmark_subset_execution():
         BENCHMARK_DATASET[16], # reasoning
     ]
 
-    evaluator = BenchmarkEvaluator(dataset=subset)
+    evaluator = BenchmarkEvaluator(dataset=subset, mock_mode=True)
     report = await evaluator.run_full_benchmark()
 
     # 1. Report structure check

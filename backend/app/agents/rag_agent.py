@@ -5,7 +5,7 @@ from backend.app.agents.base import BaseAgent
 from backend.app.core.config import settings
 from backend.app.utils.cost_tracker import calculate_token_cost
 from backend.app.agents._mock_answers import resolve as _mock_resolve
-import backend.app.utils.llm_client  # propagates provider keys to LiteLLM at import time
+from backend.app.utils.llm_client import _push_keys, format_model_name
 
 MOCK_KNOWLEDGE_BASE = [
     {"keywords": ["pricing", "cost", "token"], "text": "CAAR systems reduce API billing by dynamically routing 65% of simple queries to commodity models, achieving up to 70% cost savings."},
@@ -14,6 +14,7 @@ MOCK_KNOWLEDGE_BASE = [
 ]
 
 class RAGAgent(BaseAgent):
+
     def __init__(self, model: Optional[str] = None):
         super().__init__(name="Augmented RAG Agent", tier=2)
         self._model = model
@@ -41,18 +42,20 @@ class RAGAgent(BaseAgent):
         augmented_prompt = f"Context: {context}\n\nQuestion: {prompt}" if context else prompt
         formatted_messages = messages or [{"role": "user", "content": augmented_prompt}]
         
-        # Mock mode — active when no real provider key is configured
-        if settings.is_mock_mode:
+        # Mock mode — active when no real provider key is configured or explicitly enabled
+        if getattr(self, "mock_mode", False) or settings.is_mock_mode:
             return self._execute_mock(prompt, context, expected_format, start_time)
             
         try:
-            backend.app.utils.llm_client._push_keys()
+            _push_keys()
+            target_model = format_model_name(self.model)
             response = await litellm.acompletion(
-                model=self.model,
+                model=target_model,
                 messages=formatted_messages,
                 temperature=0.4, # lower temperature for RAG QA stability
                 max_tokens=600
             )
+
             
             choice = response.choices[0] if getattr(response, "choices", None) else None
             text = (choice.message.content if choice and hasattr(choice, "message") and hasattr(choice.message, "content") else "") or ""

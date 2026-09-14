@@ -149,11 +149,15 @@ def validate_item_response(item: BenchmarkItem, response_text: str) -> Tuple[boo
 # ---------------------------------------------------------------------------
 
 class BenchmarkEvaluator:
-    def __init__(self, dataset: Optional[List[BenchmarkItem]] = None):
+    def __init__(self, dataset: Optional[List[BenchmarkItem]] = None, mock_mode: bool = False):
         self.dataset = dataset or list(BENCHMARK_DATASET)
+        self.mock_mode = mock_mode
         self.tier_1_agent = CheapAgent()
         self.highest_tier_agent = ConsensusAgent()
-        self.router_engine = RouterEngine()
+        self.router_engine = RouterEngine(mock_mode=mock_mode)
+        if mock_mode:
+            self.tier_1_agent.mock_mode = True
+            self.highest_tier_agent.mock_mode = True
 
     async def evaluate_strategy_tier_1_only(self) -> Tuple[StrategyMetrics, List[QueryResult]]:
         """Run all benchmark items through Tier 1 (Cheap Direct Agent) only."""
