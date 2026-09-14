@@ -28,6 +28,8 @@ function switchTab(event, panelId) {
   if (panelId === 'tab-analytics') {
     fetchSummary();
     fetchLogs();
+  } else if (panelId === 'tab-rag') {
+    fetchKnowledgeBaseDocuments();
   } else if (panelId === 'tab-policies') {
     fetchPolicies();
     fetchSummary();
@@ -364,6 +366,24 @@ async function submitSandboxPrompt() {
     document.getElementById("ss-latency").innerText = `${result.usage.total_latency_ms} ms`;
     document.getElementById("ss-path").innerText = escalationPath;
     document.getElementById("ss-reason").innerText = result.routing_reason || "—";
+    
+    // Render RAG Citations if present
+    const ragContainer = document.getElementById("ss-rag-container");
+    const ragSourcesEl = document.getElementById("ss-rag-sources");
+    if (ragContainer && ragSourcesEl) {
+      if (result.rag_used && result.sources && result.sources.length > 0) {
+        ragContainer.style.display = "block";
+        ragSourcesEl.innerHTML = result.sources.map(s => `
+          <div style="margin-top: 0.3rem; padding: 0.3rem 0.5rem; background: rgba(255,255,255,0.03); border-radius: 4px;">
+            <strong>📄 ${escapeHtml(s.document_name)}</strong> (Relevance: ${(s.similarity_score * 100).toFixed(0)}%)
+            <div style="font-size: 0.75rem; color: var(--color-text-muted); margin-top: 0.1rem;">Chunk #${s.chunk_index}: "${escapeHtml(s.text_snippet.substring(0, 120))}..."</div>
+          </div>
+        `).join("");
+      } else {
+        ragContainer.style.display = "none";
+      }
+    }
+
     document.getElementById("sandbox-result-summary").style.display = "block";
     
     document.getElementById("result-text").innerText = result.text;
@@ -375,6 +395,111 @@ async function submitSandboxPrompt() {
     console.error("Error submitting sandbox run:", error);
     document.getElementById("result-text").innerText = "Routing execution error. See console details.";
     visualizerContainer.innerHTML = `<div style="color: var(--color-error); padding: 1rem;"><i class="fa-solid fa-triangle-exclamation"></i> Error running completions router gateway.</div>`;
+  }
+}
+
+// RAG Knowledge Base Documents Management
+async function fetchKnowledgeBaseDocuments() {
+  try {
+    const res = await fetch(`${API_BASE}/rag/documents`);
+    const data = await res.json();
+    
+    const tbody = document.getElementById("rag-docs-table-body");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    
+    if (!data.documents || data.documents.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--color-text-muted); padding: 2rem;">No documents ingested yet. Upload a PDF, TXT, or MD file above!</td></tr>`;
+      return;
+    }
+    
+    data.documents.forEach(doc => {
+      const dateObj = new Date(doc.created_at);
+      const dateStr = dateObj.toLocaleDateString() + " " + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const sizeKb = (doc.file_size / 1024).toFixed(1);
+      
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td><strong>${escapeHtml(doc.filename)}</strong></td>
+        <td><span style="font-size: 0.8rem; color: var(--color-text-muted);">${escapeHtml(doc.file_type)}</span></td>
+        <td>${sizeKb} KB</td>
+        <td><span class="tier-pill t2">${doc.chunk_count} chunks</span></td>
+        <td style="font-size: 0.8rem; color: var(--color-text-muted);">${dateStr}</td>
+        <td>
+          <button class="action-btn" style="background: rgba(239, 68, 68, 0.2); color: var(--color-error); border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="deleteKnowledgeDocument('${doc.id}')">
+            <i class="fa-solid fa-trash"></i> Delete
+          </button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
+  } catch (error) {
+    console.error("Error fetching knowledge base documents:", error);
+  }
+}
+
+async function uploadKnowledgeDocument() {
+  const fileInput = document.getElementById("rag-file-input");
+  const statusEl = document.getElementById("rag-upload-status");
+  
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    alert("Please select a file to ingest first.");
+    return;
+  }
+  
+  const file = fileInput.files[0];
+  const formData = new FormData();
+  formData.append("file", file);
+  
+  if (statusEl) {
+    statusEl.style.display = "block";
+    statusEl.style.color = "var(--color-warning)";
+    statusEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Ingesting '${escapeHtml(file.name)}', extracting text & generating vector embeddings...`;
+  }
+  
+  try {
+    const res = await fetch(`${API_BASE}/rag/documents/upload`, {
+      method: "POST",
+      body: formData
+    });
+    
+    const result = await res.json();
+    if (res.ok) {
+      if (statusEl) {
+        statusEl.style.color = "var(--color-success)";
+        statusEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Successfully ingested '${escapeHtml(file.name)}' into vector index (${result.document.chunk_count} chunks).`;
+      }
+      fileInput.value = "";
+      fetchKnowledgeBaseDocuments();
+    } else {
+      if (statusEl) {
+        statusEl.style.color = "var(--color-error)";
+        statusEl.innerText = `Ingestion failed: ${result.detail || 'Unknown error'}`;
+      }
+    }
+  } catch (error) {
+    console.error("Error uploading document:", error);
+    if (statusEl) {
+      statusEl.style.color = "var(--color-error)";
+      statusEl.innerText = `Upload error: ${error.message}`;
+    }
+  }
+}
+
+async function deleteKnowledgeDocument(docId) {
+  if (!confirm("Are you sure you want to delete this document and all its indexed vector chunks?")) return;
+  
+  try {
+    const res = await fetch(`${API_BASE}/rag/documents/${docId}`, {
+      method: "DELETE"
+    });
+    if (res.ok) {
+      fetchKnowledgeBaseDocuments();
+    } else {
+      alert("Failed to delete document.");
+    }
+  } catch (error) {
+    console.error("Error deleting document:", error);
   }
 }
 

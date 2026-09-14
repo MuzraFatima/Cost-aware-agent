@@ -35,6 +35,9 @@
         <button class="tab-btn" onclick="switchTab(event, 'tab-sandbox')">
           <i class="fa-solid fa-flask"></i> Sandbox
         </button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab-rag')">
+          <i class="fa-solid fa-book-bookmark"></i> Knowledge Base (RAG)
+        </button>
         <button class="tab-btn" onclick="switchTab(event, 'tab-policies')">
           <i class="fa-solid fa-sliders"></i> Policies & Budgets
         </button>
@@ -244,6 +247,10 @@
                 <div class="summary-label"><i class="fa-solid fa-circle-info"></i> Routing Reason</div>
                 <div class="summary-value" id="ss-reason" style="font-size: 0.8rem; color: var(--color-text-muted);">—</div>
               </div>
+              <div class="summary-metric" style="grid-column: 1 / -1; id=ss-rag-container; display:none;">
+                <div class="summary-label"><i class="fa-solid fa-book-bookmark"></i> Knowledge Base Citations</div>
+                <div class="summary-value" id="ss-rag-sources" style="font-size: 0.8rem; font-weight: normal; color: var(--color-text-muted);">—</div>
+              </div>
             </div>
           </div>
 
@@ -265,7 +272,45 @@
       </div>
     </div>
 
-    <!-- TAB 3: Policy Config & Budget Plane -->
+    <!-- TAB 3: Knowledge Base (RAG) Manager -->
+    <div id="tab-rag" class="tab-panel">
+      <div class="panel-card" style="margin-bottom: 1.5rem;">
+        <h2>Upload Document to Knowledge Base</h2>
+        <p style="color: var(--color-text-muted); margin-bottom: 1.5rem; font-size: 0.9rem;">
+          Ingest custom PDF, Text, or Markdown documents into the vector index. CAAR automatically chunk-splits and indexes content for sub-millisecond similarity search.
+        </p>
+        <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
+          <input type="file" id="rag-file-input" accept=".txt,.md,.pdf,.json,.csv" class="form-select" style="max-width: 400px; padding: 0.4rem;">
+          <button class="action-btn" style="width: auto; padding: 0.6rem 1.5rem;" onclick="uploadKnowledgeDocument()">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Ingest Document
+          </button>
+        </div>
+        <div id="rag-upload-status" style="font-size: 0.85rem; display:none;"></div>
+      </div>
+
+      <div class="panel-card">
+        <h2>Indexed Knowledge Base Documents</h2>
+        <div class="logs-table-container">
+          <table class="logs-table">
+            <thead>
+              <tr>
+                <th>Filename</th>
+                <th>File Type</th>
+                <th>Size</th>
+                <th>Indexed Chunks</th>
+                <th>Date Uploaded</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rag-docs-table-body">
+              <!-- Document list loads here dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: Policy Config & Budget Plane -->
     <div id="tab-policies" class="tab-panel">
       <div class="panel-card" style="margin-bottom: 1.5rem;">
         <h2>Global Budget Intelligence Limits</h2>

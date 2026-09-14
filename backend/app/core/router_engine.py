@@ -10,7 +10,9 @@ from backend.app.agents.cheap_agent import CheapAgent
 from backend.app.agents.rag_agent import RAGAgent
 from backend.app.agents.frontier_agent import FrontierAgent
 from backend.app.agents.consensus_agent import ConsensusAgent
+from backend.app.services.knowledge_base import KnowledgeBaseService
 from backend.app.utils.cost_tracker import (
+
     estimate_frontier_cost,
     estimate_pre_request_cost,
     calculate_budget_status
@@ -130,9 +132,9 @@ class RouterEngine:
         return max(1, min(10, score))
 
 
-    def classify_complexity(self, prompt: str, domain: Optional[str] = None) -> int:
+    def classify_complexity(self, prompt: str, domain: Optional[str] = None, db: Optional[Session] = None) -> int:
         """
-        Determines starting tier (1-4) based on task category, prompt keywords, and complexity score.
+        Determines starting tier (1-4) based on task category, vector similarity match, prompt keywords, and complexity score.
         """
         prompt_lower = prompt.lower()
 
@@ -143,8 +145,20 @@ class RouterEngine:
         task_type = self.classify_task_type(prompt, domain)
         complexity_score = self.calculate_complexity_score(prompt, task_type)
 
-        rag_indicators = ["pricing", "cost details", "threshold configurations", "developer team"]
-        if any(ind in prompt_lower for ind in rag_indicators):
+        # Cost-aware RAG check: Check if knowledge base contains relevant chunks (similarity >= 0.25)
+        rag_indicators = ["pricing", "cost details", "threshold configurations", "developer team", "document", "knowledge base", "pdf"]
+        has_kw_match = any(ind in prompt_lower for ind in rag_indicators)
+        has_vector_match = False
+        
+        if db:
+            try:
+                top_chunks = KnowledgeBaseService.search_chunks(prompt, db=db, top_k=1, min_similarity=0.25)
+                if top_chunks:
+                    has_vector_match = True
+            except Exception:
+                pass
+
+        if has_vector_match or has_kw_match:
             return 2
 
         if complexity_score <= 3:
@@ -197,7 +211,7 @@ class RouterEngine:
         # 2. Determine task classification & ideal starting tier
         task_type = self.classify_task_type(prompt, domain)
         complexity_score = self.calculate_complexity_score(prompt, task_type)
-        ideal_start_tier = self.classify_complexity(prompt, domain)
+        ideal_start_tier = self.classify_complexity(prompt, domain, db=db)
         
         # 3. Model selection & Pre-request cost estimation
         ideal_model_name = getattr(self.agents[ideal_start_tier], "model", settings.TIER_1_MODEL)
@@ -240,6 +254,9 @@ class RouterEngine:
         steps_trace = []
         final_text = ""
         total_cost = 0.0
+        sources = []
+        rag_used = False
+        retrieval_latency_ms = 0
         
         while current_tier <= 4:
             # Check budget constraints before attempting higher tiers in cascade
@@ -255,8 +272,14 @@ class RouterEngine:
             
             try:
                 # Execute current tier
-                res = await agent.execute(prompt=prompt, messages=messages, expected_format=expected_format)
+                res = await agent.execute(prompt=prompt, messages=messages, expected_format=expected_format, db=db)
                 
+                # Check for RAG metadata in agent output
+                if res.get("rag_used"):
+                    rag_used = True
+                    sources = res.get("sources", [])
+                    retrieval_latency_ms = res.get("retrieval_latency_ms", 0)
+
                 # Calculate confidence score
                 confidence = await ConfidenceEvaluator.calculate_confidence(
                     prompt=prompt,
@@ -273,7 +296,10 @@ class RouterEngine:
                     "tokens_input": res["tokens_input"],
                     "tokens_output": res["tokens_output"],
                     "cost": res["cost"],
-                    "latency_ms": res["latency_ms"]
+                    "latency_ms": res["latency_ms"],
+                    "rag_used": res.get("rag_used", False),
+                    "sources": res.get("sources", []),
+                    "retrieval_latency_ms": res.get("retrieval_latency_ms", 0)
                 }
                 steps_trace.append(step_record)
                 
@@ -321,6 +347,8 @@ class RouterEngine:
             f"Classified as '{task_type}' task (complexity {complexity_score}/10).",
             f"Budget pressure: {budget_pressure}/100."
         ]
+        if rag_used and sources:
+            reason_parts.append(f"Retrieved {len(sources)} knowledge base chunk(s).")
         if downgrade_reasons:
             reason_parts.append(
                 f"Downgraded target Tier {ideal_start_tier} → Tier {start_tier} ({'; '.join(downgrade_reasons)})."
@@ -381,6 +409,9 @@ class RouterEngine:
             "selected_model": selected_model,
             "routing_reason": routing_reason,
             "threshold_used": threshold,
+            "rag_used": rag_used,
+            "sources": sources,
+            "retrieval_latency_ms": retrieval_latency_ms,
             "usage": {
                 "total_cost_usd": round(total_cost, 8),
                 "estimated_frontier_cost_usd": round(frontier_cost, 8),
@@ -389,6 +420,9 @@ class RouterEngine:
                 "budget_pressure_score": budget_pressure,
                 "remaining_daily_budget_usd": budget_status["remaining_daily_budget_usd"],
                 "total_latency_ms": total_latency,
+                "retrieval_latency_ms": retrieval_latency_ms,
+                "rag_used": rag_used,
+                "sources_count": len(sources),
                 "routing_path": steps_trace,
                 "budget_limit_usd": budget_limit_usd,
                 "budget_exceeded": (
@@ -399,3 +433,4 @@ class RouterEngine:
 
 
 router_engine = RouterEngine()
+

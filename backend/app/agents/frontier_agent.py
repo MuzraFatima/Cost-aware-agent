@@ -25,7 +25,8 @@ class FrontierAgent(BaseAgent):
         self,
         prompt: str,
         messages: Optional[List[Dict[str, str]]] = None,
-        expected_format: Optional[str] = None
+        expected_format: Optional[str] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         start_time = time.time()
         formatted_messages = messages or [{"role": "user", "content": prompt}]

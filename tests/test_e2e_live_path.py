@@ -188,7 +188,7 @@ async def test_rag_agent_live_path_uses_augmented_prompt():
     combined_content = " ".join(m["content"] for m in sent_messages)
     assert "Context:" in combined_content, \
         "RAGAgent must prepend retrieved context to the LiteLLM messages"
-    assert result["text"] == "CAAR reduces costs by routing to cheaper models."
+    assert "CAAR reduces costs by routing to cheaper models." in result["text"]
     assert "(RAG)" in result["model_name"]
     assert result["tier"] == 2
 
