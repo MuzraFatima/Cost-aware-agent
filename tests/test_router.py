@@ -401,6 +401,12 @@ async def test_phase2_task_classification_and_complexity_scoring():
 
 async def test_phase2_acceptance_criteria_routing_decisions():
     """Verify acceptance criteria requirements for Phase 2 distinct routing decisions."""
+    with SessionLocal() as db:
+        policy = db.execute(select(RoutingPolicy).where(RoutingPolicy.domain == "general")).scalars().first()
+        if policy:
+            policy.min_confidence_threshold = 0.65
+            db.commit()
+
     # Prompt 1: Simple question
     p1 = await router_engine.route("What is Python?")
     assert p1["task_type"] == "general"

@@ -10,9 +10,12 @@ from backend.app.agents.cheap_agent import CheapAgent
 from backend.app.agents.rag_agent import RAGAgent
 from backend.app.agents.frontier_agent import FrontierAgent
 from backend.app.agents.consensus_agent import ConsensusAgent
+from backend.app.agents.coding_agent import CodingAgent
+from backend.app.agents.research_agent import ResearchAgent
+from backend.app.agents.analysis_agent import AnalysisAgent
+from backend.app.core.multi_agent_coordinator import MultiAgentCoordinator
 from backend.app.services.knowledge_base import KnowledgeBaseService
 from backend.app.utils.cost_tracker import (
-
     estimate_frontier_cost,
     estimate_pre_request_cost,
     calculate_budget_status
@@ -20,16 +23,25 @@ from backend.app.utils.cost_tracker import (
 
 class RouterEngine:
     def __init__(self, mock_mode: bool = False):
-        # Initialize Agent pool
+        # Initialize Agent pool & coordinator
+        self.coordinator = MultiAgentCoordinator(mock_mode=mock_mode)
         self.agents = {
             1: CheapAgent(),
             2: RAGAgent(),
             3: FrontierAgent(),
             4: ConsensusAgent()
         }
+        self.specialized_agents = {
+            "coding": CodingAgent(),
+            "research": ResearchAgent(),
+            "analysis": AnalysisAgent()
+        }
         if mock_mode:
             for agent in self.agents.values():
                 agent.mock_mode = True
+            for agent in self.specialized_agents.values():
+                agent.mock_mode = True
+
 
     def classify_task_type(self, prompt: str, domain: Optional[str] = None) -> str:
         """
@@ -269,6 +281,12 @@ class RouterEngine:
                     break
 
             agent = self.agents[current_tier]
+            if task_type == "coding" and current_tier == 3:
+                agent = self.specialized_agents["coding"]
+            elif task_type == "research" and current_tier == 3:
+                agent = self.specialized_agents["research"]
+            elif task_type == "analysis" and current_tier == 2:
+                agent = self.specialized_agents["analysis"]
             
             try:
                 # Execute current tier

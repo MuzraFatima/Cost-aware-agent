@@ -38,6 +38,9 @@
         <button class="tab-btn" onclick="switchTab(event, 'tab-rag')">
           <i class="fa-solid fa-book-bookmark"></i> Knowledge Base (RAG)
         </button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab-agents')">
+          <i class="fa-solid fa-users-gear"></i> Multi-Agent System
+        </button>
         <button class="tab-btn" onclick="switchTab(event, 'tab-policies')">
           <i class="fa-solid fa-sliders"></i> Policies & Budgets
         </button>
@@ -310,7 +313,21 @@
       </div>
     </div>
 
-    <!-- TAB 4: Policy Config & Budget Plane -->
+    <!-- TAB 4: Multi-Agent System Pool -->
+    <div id="tab-agents" class="tab-panel">
+      <div class="panel-card" style="margin-bottom: 1.5rem;">
+        <h2>Multi-Agent System Pool & Capabilities</h2>
+        <p style="color: var(--color-text-muted); margin-bottom: 1.5rem; font-size: 0.9rem;">
+          CAAR 2.0 maintains a pool of domain-specialized AI agents. The gateway dynamically routes incoming instructions to the most optimal agent based on domain classification, task complexity score, model capacity, and real-time budget pressure.
+        </p>
+      </div>
+
+      <div class="kpi-grid" id="agents-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+        <!-- Agent cards load dynamically -->
+      </div>
+    </div>
+
+    <!-- TAB 5: Policy Config & Budget Plane -->
     <div id="tab-policies" class="tab-panel">
       <div class="panel-card" style="margin-bottom: 1.5rem;">
         <h2>Global Budget Intelligence Limits</h2>

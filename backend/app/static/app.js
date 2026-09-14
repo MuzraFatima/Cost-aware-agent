@@ -30,6 +30,8 @@ function switchTab(event, panelId) {
     fetchLogs();
   } else if (panelId === 'tab-rag') {
     fetchKnowledgeBaseDocuments();
+  } else if (panelId === 'tab-agents') {
+    fetchAgentRegistry();
   } else if (panelId === 'tab-policies') {
     fetchPolicies();
     fetchSummary();
@@ -500,6 +502,66 @@ async function deleteKnowledgeDocument(docId) {
     }
   } catch (error) {
     console.error("Error deleting document:", error);
+  }
+}
+
+// Fetch Multi-Agent Pool Registry
+async function fetchAgentRegistry() {
+  try {
+    const res = await fetch(`${API_BASE}/agents/registry`);
+    const data = await res.json();
+    
+    const container = document.getElementById("agents-grid");
+    if (!container) return;
+    container.innerHTML = "";
+    
+    if (!data.agents || data.agents.length === 0) {
+      container.innerHTML = `<div style="color: var(--color-text-muted);">No agents registered.</div>`;
+      return;
+    }
+    
+    const icons = {
+      coding: "fa-code",
+      research: "fa-microscope",
+      analysis: "fa-chart-pie",
+      general: "fa-bolt",
+      rag: "fa-book-bookmark",
+      reasoning: "fa-brain",
+      consensus: "fa-diagram-project"
+    };
+
+    data.agents.forEach(agent => {
+      const card = document.createElement("div");
+      card.className = "kpi-card";
+      card.style.display = "flex";
+      card.style.flexDirection = "column";
+      card.style.justifyContent = "space-between";
+      
+      const iconClass = icons[agent.specialization] || "fa-robot";
+      
+      card.innerHTML = `
+        <div>
+          <div class="kpi-header" style="margin-bottom: 0.75rem;">
+            <span style="font-weight: 700; font-size: 1rem; color: var(--color-text-main);">${escapeHtml(agent.name)}</span>
+            <div class="kpi-icon" style="background: rgba(99, 102, 241, 0.15); color: var(--color-primary);">
+              <i class="fa-solid ${iconClass}"></i>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <span class="tier-pill t${agent.tier}">Tier ${agent.tier}</span>
+            <span style="background: rgba(255,255,255,0.06); padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; color: var(--color-text-muted); font-weight: 600; text-transform: uppercase;">${escapeHtml(agent.specialization)}</span>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--color-text-muted); line-height: 1.4; margin-bottom: 1rem;">${escapeHtml(agent.description)}</p>
+        </div>
+        <div style="font-size: 0.8rem; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 0.75rem; color: var(--color-text-muted); display:flex; justify-content:space-between;">
+          <span>Model: <strong>${escapeHtml(agent.model_name)}</strong></span>
+          <span>${escapeHtml(agent.cost_tier)}</span>
+        </div>
+      `;
+      container.appendChild(card);
+    });
+  } catch (error) {
+    console.error("Error fetching agent registry:", error);
   }
 }
 

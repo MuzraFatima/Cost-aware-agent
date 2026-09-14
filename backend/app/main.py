@@ -9,6 +9,7 @@ from backend.app.api.router import router as router_api
 from backend.app.api.analytics import router as analytics_api
 from backend.app.api.config import router as config_api
 from backend.app.api.rag import router as rag_api
+from backend.app.api.agents import router as agents_api
 
 # Async context manager for database initialization
 @asynccontextmanager
@@ -41,6 +42,8 @@ app.include_router(router_api, prefix=f"{settings.API_V1_STR}/router", tags=["ro
 app.include_router(analytics_api, prefix=f"{settings.API_V1_STR}/analytics", tags=["analytics"])
 app.include_router(config_api, prefix=f"{settings.API_V1_STR}/config", tags=["config"])
 app.include_router(rag_api, prefix=f"{settings.API_V1_STR}/rag", tags=["rag"])
+app.include_router(agents_api, prefix=f"{settings.API_V1_STR}/agents", tags=["agents"])
+
 
 
 # Serve dashboard static files at root

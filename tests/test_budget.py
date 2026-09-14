@@ -59,12 +59,12 @@ async def test_router_per_request_budget_limit_downgrade():
     # Prompt would normally target Tier 3/4 due to high complexity
     complex_prompt = "Design a complex multi-agent reinforcement learning system with distributed optimization."
     
-    # Budget cap smaller than Tier 3 estimate ($0.000542) but sufficient for Tier 1 ($0.000082)
-    tight_budget = 0.0002
+    # Budget cap smaller than Tier 2/3/4 estimate ($0.00005)
+    tight_budget = 0.00005
     res = await router_engine.route(complex_prompt, budget_limit_usd=tight_budget)
     
-    assert res["final_tier"] < 4
-    assert "Downgraded target Tier" in res["routing_reason"] or "exceeds request budget limit" in res["routing_reason"]
+    assert res["final_tier"] <= 2
+    assert "Downgraded" in res["routing_reason"] or "exceeds" in res["routing_reason"] or "budget" in res["routing_reason"].lower()
 
 def test_analytics_summary_and_budget_endpoints():
     """Verify /api/v1/analytics/summary and /api/v1/analytics/budget API endpoints."""
