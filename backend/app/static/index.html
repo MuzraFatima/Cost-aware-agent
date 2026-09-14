@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cost-Aware Agent Router (CAAR) Dashboard</title>
+  <title>Cost-Aware Agent Router (CAAR 2.0) Dashboard</title>
   <!-- Google Fonts & FontAwesome CDN -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,7 +24,11 @@
         </div>
         <div class="brand-title">
           <h1>Cost-Aware Agent Router</h1>
-          <p>Confidence-Based Multi-Agent LLM Gateway</p>
+          <p>Confidence-Based Multi-Agent LLM Gateway (CAAR 2.0)</p>
+        </div>
+        <div id="provider-status-badge" class="provider-status-badge live" style="margin-left: 1.25rem;">
+          <span class="dot"></span>
+          <span id="provider-status-text">Checking Gateway...</span>
         </div>
       </div>
       <!-- Tab Selector Navigation -->
@@ -144,7 +148,7 @@
       </div>
 
       <!-- Live Charts Group -->
-      <div class="charts-grid">
+      <div class="charts-grid" style="grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));">
         <div class="chart-card">
           <div class="chart-title">
             <span>Cost Efficiency Metrics (Savings vs. Expense)</span>
@@ -164,6 +168,16 @@
             <canvas id="tierDistributionChart"></canvas>
           </div>
         </div>
+
+        <div class="chart-card">
+          <div class="chart-title">
+            <span>Task Category Distribution</span>
+            <span style="font-size: 0.8rem; font-weight: normal; color: var(--color-text-muted);">Query domain share</span>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="domainDistributionChart"></canvas>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -173,6 +187,31 @@
         <!-- Input Form Control -->
         <div class="panel-card">
           <h2>Gateway Playground</h2>
+
+          <!-- Quick Prompt Preset Chips -->
+          <div style="margin-bottom: 0.85rem;">
+            <label style="display:block; font-size: 0.78rem; color: var(--color-text-muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em;">
+              Quick Start Presets
+            </label>
+            <div class="preset-chips-container">
+              <button type="button" class="preset-chip" onclick="applyPreset('coding')">
+                <i class="fa-solid fa-code"></i> Coding
+              </button>
+              <button type="button" class="preset-chip" onclick="applyPreset('math')">
+                <i class="fa-solid fa-calculator"></i> Math
+              </button>
+              <button type="button" class="preset-chip" onclick="applyPreset('rag')">
+                <i class="fa-solid fa-book-bookmark"></i> RAG Query
+              </button>
+              <button type="button" class="preset-chip" onclick="applyPreset('analysis')">
+                <i class="fa-solid fa-chart-simple"></i> Analysis
+              </button>
+              <button type="button" class="preset-chip" onclick="applyPreset('escalation')">
+                <i class="fa-solid fa-arrow-up-right-dots"></i> JSON Escalation
+              </button>
+            </div>
+          </div>
+
           <div class="form-group">
             <label for="sandbox-prompt">Input Prompt</label>
             <textarea id="sandbox-prompt" class="form-textarea" placeholder="Type your instruction... (e.g. 'Solve 123 * 45' to test math escalations or 'Write a Python script to sort a list')"></textarea>
@@ -219,11 +258,11 @@
             <h2 style="margin-bottom: 0.75rem;">Routing Decision Summary</h2>
             <div class="sandbox-summary-grid">
               <div class="summary-metric">
-                <div class="summary-label"><i class="fa-solid fa-layer-group"></i> Selected Tier</div>
+                <div class="summary-label"><i class="fa-solid fa-server"></i> Final Tier</div>
                 <div class="summary-value" id="ss-tier">—</div>
               </div>
               <div class="summary-metric">
-                <div class="summary-label"><i class="fa-solid fa-shield-halved"></i> Confidence</div>
+                <div class="summary-label"><i class="fa-solid fa-shield-halved"></i> Calibrated Confidence</div>
                 <div class="summary-value" id="ss-confidence">—</div>
               </div>
               <div class="summary-metric">
@@ -262,7 +301,12 @@
             </div>
           </div>
 
-          <h2>Accepted Output Response</h2>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h2>Accepted Output Response</h2>
+            <button type="button" class="copy-btn" id="copy-output-btn" onclick="copyOutputResponse()">
+              <i class="fa-regular fa-copy"></i> Copy Output
+            </button>
+          </div>
           <div class="result-box">
             <div id="result-text" class="result-content"></div>
             <div id="result-placeholder" class="result-placeholder">Outputs will appear here...</div>
@@ -354,6 +398,22 @@
         </button>
       </div>
 
+      <!-- Domain Confidence Calibration Section -->
+      <div class="panel-card" style="margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <h2>Domain Confidence Calibration & Evaluation Weights</h2>
+          <button class="action-btn" style="width: auto; padding: 0.4rem 1rem; font-size: 0.8rem;" onclick="saveCalibrationWeights()">
+            <i class="fa-solid fa-check"></i> Save Calibration Weights
+          </button>
+        </div>
+        <p style="color: var(--color-text-muted); margin-bottom: 1.25rem; font-size: 0.9rem;">
+          Fine-tune the importance of Syntactic, Semantic, Hedging, and Factuality dimensions per task domain. Weights are automatically normalized to 100%.
+        </p>
+        <div class="calibration-grid" id="calibration-cards-container">
+          <!-- Dynamically populated calibration cards for each domain -->
+        </div>
+      </div>
+
       <div class="panel-card">
         <h2>Manual Confidence Routing Policy Adjustments</h2>
         <p style="color: var(--color-text-muted); margin-bottom: 1.5rem; font-size: 0.9rem;">
@@ -365,8 +425,25 @@
       </div>
     </div>
 
-    <!-- TAB 4: History Logs -->
+    <!-- TAB 6: History Logs -->
     <div id="tab-logs" class="tab-panel">
+      <div class="logs-toolbar">
+        <div class="logs-search-box">
+          <i class="fa-solid fa-magnifying-glass" style="color: var(--color-text-muted);"></i>
+          <input type="text" id="logs-search-input" placeholder="Search prompts, models, routing reasons..." oninput="filterLogsTable()">
+        </div>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <label style="font-size: 0.8rem; color: var(--color-text-muted);">Filter by Tier:</label>
+          <select id="logs-tier-filter" class="form-select" style="width: auto; padding: 0.35rem 0.8rem;" onchange="filterLogsTable()">
+            <option value="all">All Tiers</option>
+            <option value="1">Tier 1 (Commodity)</option>
+            <option value="2">Tier 2 (RAG / Analysis)</option>
+            <option value="3">Tier 3 (Frontier / Code)</option>
+            <option value="4">Tier 4 (Consensus)</option>
+          </select>
+        </div>
+      </div>
+
       <div class="logs-table-container">
         <table class="logs-table">
           <thead>

@@ -5,6 +5,9 @@ const API_BASE = "/api/v1";
 let activeLogIdForFeedback = null;
 let costSavingsChartInstance = null;
 let tierDistributionChartInstance = null;
+let domainDistributionChartInstance = null;
+let allLogsData = [];
+let activeCalibrationWeights = {};
 
 // Initial Setup on DOM Content Loaded
 document.addEventListener("DOMContentLoaded", () => {
@@ -12,9 +15,35 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function initializeDashboard() {
+  checkProviderStatus();
   await fetchSummary();
   await fetchPolicies();
+  await fetchCalibrationWeights();
   await fetchLogs();
+}
+
+// Check Gateway Provider Live Status
+async function checkProviderStatus() {
+  const badge = document.getElementById("provider-status-badge");
+  const textEl = document.getElementById("provider-status-text");
+  if (!badge || !textEl) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/agents/registry`);
+    const data = await res.json();
+    const isLive = data.agent_pool && data.agent_pool.some(a => a.status === "live");
+
+    if (isLive) {
+      badge.className = "provider-status-badge live";
+      textEl.innerText = "Groq Live API Connected";
+    } else {
+      badge.className = "provider-status-badge mock";
+      textEl.innerText = "Mock Mode Fallback";
+    }
+  } catch (err) {
+    badge.className = "provider-status-badge mock";
+    textEl.innerText = "Offline / Standby";
+  }
 }
 
 // Tab Switching Mechanism
@@ -34,10 +63,63 @@ function switchTab(event, panelId) {
     fetchAgentRegistry();
   } else if (panelId === 'tab-policies') {
     fetchPolicies();
+    fetchCalibrationWeights();
     fetchSummary();
   } else if (panelId === 'tab-logs') {
     fetchLogs();
   }
+}
+
+// Quick Prompt Presets
+function applyPreset(type) {
+  const promptEl = document.getElementById("sandbox-prompt");
+  const domainEl = document.getElementById("sandbox-domain");
+  const formatEl = document.getElementById("sandbox-format");
+
+  if (!promptEl || !domainEl || !formatEl) return;
+
+  if (type === 'coding') {
+    promptEl.value = "Write a Python function to implement quicksort with type annotations and docstring.";
+    domainEl.value = "coding";
+    formatEl.value = "python";
+  } else if (type === 'math') {
+    promptEl.value = "Solve the expression 345 * 28 + sqrt(144) step by step.";
+    domainEl.value = "math";
+    formatEl.value = "";
+  } else if (type === 'rag') {
+    promptEl.value = "What are the minimum confidence thresholds and pricing details documented in the knowledge base?";
+    domainEl.value = "general";
+    formatEl.value = "";
+  } else if (type === 'analysis') {
+    promptEl.value = "Parse and analyze latency percentiles and error rates from server log lines.";
+    domainEl.value = "analysis";
+    formatEl.value = "";
+  } else if (type === 'escalation') {
+    promptEl.value = "Output configuration JSON";
+    domainEl.value = "general";
+    formatEl.value = "json";
+  }
+}
+
+// Copy Response Output
+function copyOutputResponse() {
+  const resultText = document.getElementById("result-text");
+  const copyBtn = document.getElementById("copy-output-btn");
+  if (!resultText || !resultText.innerText.trim()) return;
+
+  navigator.clipboard.writeText(resultText.innerText).then(() => {
+    if (copyBtn) {
+      const originalHtml = copyBtn.innerHTML;
+      copyBtn.innerHTML = `<i class="fa-solid fa-check"></i> Copied!`;
+      copyBtn.style.color = "var(--color-success)";
+      setTimeout(() => {
+        copyBtn.innerHTML = originalHtml;
+        copyBtn.style.color = "";
+      }, 2000);
+    }
+  }).catch(err => {
+    console.error("Clipboard copy error:", err);
+  });
 }
 
 // Fetch Metrics & Budget Summary
@@ -82,7 +164,6 @@ async function fetchSummary() {
 
     document.getElementById("kpi-savings").innerText = `$${(data.cost_saved_vs_frontier_only || 0).toFixed(5)}`;
     document.getElementById("kpi-latency").innerText = `${data.average_latency_ms || 0} ms`;
-    document.getElementById("kpi-confidence").innerText = (data.average_confidence || 0).toFixed(2);
     document.getElementById("kpi-escalation").innerText = `${((data.escalation_rate || 0) * 100).toFixed(1)}%`;
     
     // Set Budget inputs if in policy tab
@@ -129,155 +210,281 @@ async function saveBudgetLimits() {
   }
 }
 
-// Fetch Active Routing Policies and render controls
+// Confidence Calibration Management
+async function fetchCalibrationWeights() {
+  const container = document.getElementById("calibration-cards-container");
+  if (!container) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/evaluator/calibration`);
+    const data = await res.json();
+    activeCalibrationWeights = data.domain_weights || {};
+
+    container.innerHTML = "";
+    const domains = Object.keys(activeCalibrationWeights);
+
+    domains.forEach(domain => {
+      const weights = activeCalibrationWeights[domain];
+      const card = document.createElement("div");
+      card.className = "calibration-card";
+      
+      let icon = "fa-layer-group";
+      if (domain === "coding") icon = "fa-code";
+      else if (domain === "math") icon = "fa-calculator";
+      else if (domain === "rag" || domain === "research") icon = "fa-book-bookmark";
+      else if (domain === "analysis") icon = "fa-chart-pie";
+
+      card.innerHTML = `
+        <div class="calibration-card-header">
+          <div class="calibration-card-title">
+            <i class="fa-solid ${icon}"></i> ${domain} Domain
+          </div>
+        </div>
+        ${Object.keys(weights).map(dim => {
+          const valPct = Math.round(weights[dim] * 100);
+          return `
+            <div class="weight-slider-group">
+              <div class="weight-slider-label">
+                <span style="text-transform: capitalize;">${dim}</span>
+                <span id="label-${domain}-${dim}">${valPct}%</span>
+              </div>
+              <input type="range" class="weight-slider" id="slider-${domain}-${dim}" 
+                min="0" max="100" value="${valPct}" 
+                oninput="onWeightSliderChange('${domain}', '${dim}', this.value)">
+            </div>
+          `;
+        }).join("")}
+      `;
+      container.appendChild(card);
+    });
+  } catch (err) {
+    console.error("Error fetching calibration weights:", err);
+  }
+}
+
+function onWeightSliderChange(domain, dimension, val) {
+  const label = document.getElementById(`label-${domain}-${dimension}`);
+  if (label) label.innerText = `${val}%`;
+  if (!activeCalibrationWeights[domain]) activeCalibrationWeights[domain] = {};
+  activeCalibrationWeights[domain][dimension] = parseFloat(val) / 100.0;
+}
+
+async function saveCalibrationWeights() {
+  try {
+    for (const domain of Object.keys(activeCalibrationWeights)) {
+      const weights = activeCalibrationWeights[domain];
+      await fetch(`${API_BASE}/evaluator/calibration`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain, weights })
+      });
+    }
+    alert("Domain confidence calibration weights successfully saved!");
+    fetchCalibrationWeights();
+  } catch (err) {
+    console.error("Error saving calibration weights:", err);
+    alert("Failed to save calibration weights.");
+  }
+}
+
+// Fetch Routing Policies & Sliders
 async function fetchPolicies() {
   try {
     const res = await fetch(`${API_BASE}/config/policies`);
     const policies = await res.json();
     
-    const sliderContainer = document.getElementById("policy-slider-list");
-    sliderContainer.innerHTML = "";
+    const sliderList = document.getElementById("policy-slider-list");
+    sliderList.innerHTML = "";
     
     policies.forEach(policy => {
-      const row = document.createElement("div");
-      row.className = "policy-row";
-      row.innerHTML = `
-        <div class="policy-info">
-          <div class="policy-domain">${policy.domain}</div>
-          <p>Minimum threshold confidence score</p>
+      const card = document.createElement("div");
+      card.className = "policy-card";
+      
+      const domainNormalized = policy.domain.charAt(0).toUpperCase() + policy.domain.slice(1);
+      
+      card.innerHTML = `
+        <div class="policy-header">
+          <div class="policy-title">${domainNormalized} Domain Policy</div>
+          <div class="policy-threshold" id="val-${policy.domain}">
+            ${(policy.min_confidence_threshold * 100).toFixed(0)}%
+          </div>
         </div>
         <div class="slider-container">
-          <input type="range" min="0.0" max="1.0" step="0.05" class="policy-slider" 
-                 value="${policy.min_confidence_threshold}" 
-                 oninput="updateSliderValue(this)"
-                 onchange="savePolicyThreshold('${policy.domain}', this.value)">
-          <div class="threshold-val" id="val-${policy.domain}">${policy.min_confidence_threshold.toFixed(2)}</div>
+          <input 
+            type="range" 
+            class="slider-input" 
+            min="0.4" 
+            max="0.99" 
+            step="0.01" 
+            value="${policy.min_confidence_threshold}"
+            id="slider-${policy.domain}"
+            oninput="handleSliderChange('${policy.domain}', this.value)"
+          >
         </div>
       `;
-      sliderContainer.appendChild(row);
+      sliderList.appendChild(card);
     });
   } catch (error) {
-    console.error("Error fetching policies:", error);
+    console.error("Error fetching routing policies:", error);
   }
 }
 
-function updateSliderValue(sliderElement) {
-  const valueElement = sliderElement.nextElementSibling;
-  valueElement.innerText = parseFloat(sliderElement.value).toFixed(2);
+function handleSliderChange(domain, value) {
+  document.getElementById(`val-${domain}`).innerText = `${(parseFloat(value) * 100).toFixed(0)}%`;
+  debounce(() => savePolicy(domain, parseFloat(value)), 500)();
 }
 
-async function savePolicyThreshold(domain, thresholdValue) {
+async function savePolicy(domain, threshold) {
   try {
-    const res = await fetch(`${API_BASE}/config/policies`, {
+    await fetch(`${API_BASE}/config/policies/${domain}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        domain: domain,
-        min_confidence_threshold: parseFloat(thresholdValue)
-      })
+      body: JSON.stringify({ min_confidence_threshold: threshold })
     });
-    if (res.ok) {
-      fetchPolicies();
-    }
   } catch (error) {
-    console.error("Error updating policy threshold:", error);
+    console.error(`Error saving policy for ${domain}:`, error);
   }
 }
 
-// Fetch Log Traces
+let timeoutId = null;
+function debounce(func, delay) {
+  return function(...args) {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func.apply(this, args), delay);
+  };
+}
+
+// Fetch and Display Logs Table
 async function fetchLogs() {
   try {
     const res = await fetch(`${API_BASE}/analytics/logs?limit=50`);
-    const logs = await res.json();
-    
-    const tbody = document.getElementById("logs-table-body");
-    tbody.innerHTML = "";
-    
-    if (!logs || logs.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color: var(--color-text-muted); padding: 2rem;">No logs recorded yet. Run queries in Sandbox!</td></tr>`;
-      return;
-    }
-    
-    logs.forEach(log => {
-      const dateObj = new Date(log.created_at);
-      const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const escalationPath = log.escalation_path && log.escalation_path.length > 0 ? log.escalation_path.map(t => `T${t}`).join(" → ") : `T${log.final_tier}`;
-
-      const row = document.createElement("tr");
-      row.onclick = () => toggleRowDetails(log.id);
-      row.style.cursor = "pointer";
-      
-      row.innerHTML = `
-        <td style="white-space: nowrap; font-size: 0.82rem; color: var(--color-text-muted);">${timeStr}</td>
-        <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(log.prompt)}</td>
-        <td><span class="tier-pill t${log.final_tier}">Tier ${log.final_tier}</span></td>
-        <td><span style="font-weight: 600; font-size: 0.85rem;">${escalationPath}</span></td>
-        <td style="font-family: monospace;">$${log.total_cost.toFixed(5)}</td>
-        <td>${log.total_latency_ms} ms</td>
-        <td style="max-width: 200px; font-size: 0.78rem; color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(log.routing_reason || '')}">${escapeHtml(log.routing_reason || '—')}</td>
-        <td>${log.eval_score !== null ? (log.eval_score === 1.0 ? '<i class="fa-solid fa-thumbs-up" style="color: var(--color-success)"></i>' : '<i class="fa-solid fa-thumbs-down" style="color: var(--color-error)"></i>') : '<span style="color: var(--color-text-muted)">-</span>'}</td>
-      `;
-      tbody.appendChild(row);
-      
-      const detailRow = document.createElement("tr");
-      detailRow.id = `detail-${log.id}`;
-      detailRow.className = "log-expanded-row";
-      detailRow.style.display = "none";
-      
-      let stepTraceHtml = "";
-      log.steps.forEach((step, idx) => {
-        const isLastStep = idx === log.steps.length - 1;
-        const stepStatusColor = isLastStep ? "var(--color-success)" : "var(--color-warning)";
-        const stepStatusLabel = isLastStep ? "✓ Accepted" : "↑ Escalated";
-        stepTraceHtml += `
-          <div class="step-trace-item">
-            <span><strong>Step ${idx + 1}: Tier ${step.tier}</strong> (${step.model_name})</span>
-            <span style="display:flex; gap:0.75rem; align-items:center;">
-              Conf: <strong>${step.confidence_score.toFixed(3)}</strong>
-              | Cost: $${step.cost.toFixed(5)}
-              | Latency: ${step.latency_ms}ms
-              | Tokens: ${step.tokens_input}↑/${step.tokens_output}↓
-              <span style="color:${stepStatusColor}; font-weight:700;">${stepStatusLabel}</span>
-            </span>
-          </div>
-        `;
-      });
-      
-      detailRow.innerHTML = `
-        <td colspan="8">
-          <div class="log-expanded-details">
-            <div class="expanded-grid">
-              <div class="expanded-item">
-                <h4>Prompt Context</h4>
-                <div class="expanded-text-block">${escapeHtml(log.prompt)}</div>
-                
-                <h4 style="margin-top: 1rem;">Response Output</h4>
-                <div class="expanded-text-block">${escapeHtml(log.response || "")}</div>
-
-                <h4 style="margin-top: 1rem;">Routing Reason</h4>
-                <div class="expanded-text-block" style="font-style: italic; color: var(--color-text-muted);">${escapeHtml(log.routing_reason || '—')}</div>
-              </div>
-              <div class="expanded-item">
-                <h4>Routing Cascade Trace</h4>
-                <div class="step-trace-list">
-                  ${stepTraceHtml}
-                </div>
-                ${log.feedback_text ? `
-                  <h4 style="margin-top: 1rem;">User Review</h4>
-                  <div class="expanded-text-block" style="font-style: italic;">"${escapeHtml(log.feedback_text)}"</div>
-                ` : ""}
-              </div>
-            </div>
-          </div>
-        </td>
-      `;
-      tbody.appendChild(detailRow);
-    });
-    
-    updateSavingsChart(logs);
+    allLogsData = await res.json();
+    filterLogsTable();
+    updateSavingsChart(allLogsData);
+    updateDomainDistributionChart(allLogsData);
   } catch (error) {
     console.error("Error fetching logs:", error);
   }
+}
+
+// Search and Filter Logs
+function filterLogsTable() {
+  const tbody = document.getElementById("logs-table-body");
+  if (!tbody) return;
+
+  const searchInput = document.getElementById("logs-search-input");
+  const tierFilter = document.getElementById("logs-tier-filter");
+
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+  const selectedTier = tierFilter ? tierFilter.value : "all";
+
+  const filtered = allLogsData.filter(log => {
+    const matchesQuery = !query || 
+      log.prompt.toLowerCase().includes(query) || 
+      (log.response && log.response.toLowerCase().includes(query)) ||
+      (log.routing_reason && log.routing_reason.toLowerCase().includes(query));
+
+    const matchesTier = selectedTier === "all" || log.final_tier === parseInt(selectedTier);
+    return matchesQuery && matchesTier;
+  });
+
+  tbody.innerHTML = "";
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color: var(--color-text-muted); padding: 2rem;">No matching logs found.</td></tr>`;
+    return;
+  }
+
+  filtered.forEach(log => {
+    const dateObj = new Date(log.created_at);
+    const dateStr = dateObj.toLocaleDateString() + " " + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    let feedbackBadge = `<span style="color: var(--color-text-muted); font-size: 0.8rem;">—</span>`;
+    if (log.eval_score !== null && log.eval_score !== undefined) {
+      if (log.eval_score >= 0.8) {
+        feedbackBadge = `<span style="color: var(--color-success); font-weight:600;"><i class="fa-solid fa-thumbs-up"></i> High</span>`;
+      } else {
+        feedbackBadge = `<span style="color: var(--color-error); font-weight:600;"><i class="fa-solid fa-thumbs-down"></i> Low</span>`;
+      }
+    }
+    
+    const escalationPath = log.escalation_path && log.escalation_path.length > 0 
+      ? log.escalation_path.map(t => `T${t}`).join(" → ") 
+      : `T${log.final_tier}`;
+
+    const mainRow = document.createElement("tr");
+    mainRow.setAttribute("onclick", `toggleRowDetails('${log.id}')`);
+    mainRow.innerHTML = `
+      <td>${dateStr}</td>
+      <td title="${escapeHtml(log.prompt)}" style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        ${escapeHtml(log.prompt)}
+      </td>
+      <td><span class="tier-pill t${log.final_tier}">Tier ${log.final_tier}</span></td>
+      <td><span style="font-weight: 600; font-size: 0.85rem;">${escalationPath}</span></td>
+      <td>$${log.total_cost.toFixed(5)}</td>
+      <td>${log.total_latency_ms} ms</td>
+      <td title="${escapeHtml(log.routing_reason || '')}" style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; color: var(--color-text-muted);">
+        ${escapeHtml(log.routing_reason || '—')}
+      </td>
+      <td>${feedbackBadge}</td>
+    `;
+    tbody.appendChild(mainRow);
+    
+    const detailRow = document.createElement("tr");
+    detailRow.id = `detail-${log.id}`;
+    detailRow.className = "log-expanded-row";
+    detailRow.style.display = "none";
+    
+    let stepTraceHtml = `<div style="color: var(--color-text-muted); font-size: 0.8rem;">No step details available.</div>`;
+    if (log.steps && log.steps.length > 0) {
+      stepTraceHtml = log.steps.map((s, idx) => {
+        const isLastStep = idx === log.steps.length - 1;
+        const stepStatusLabel = isLastStep ? "✓ Accepted" : "↑ Escalated";
+        return `
+          <div class="step-trace-item">
+            <div>
+              <strong>Tier ${s.tier} (${escapeHtml(s.model_name)})</strong>
+              <div style="font-size: 0.75rem; color: var(--color-text-muted);">
+                Conf: ${s.confidence_score.toFixed(2)} | Cost: $${s.cost.toFixed(5)} | Latency: ${s.latency_ms}ms
+              </div>
+            </div>
+            <div style="font-size: 0.75rem; font-weight: 600; color: ${isLastStep ? 'var(--color-success)' : 'var(--color-warning)'};">
+              ${stepStatusLabel}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+    
+    detailRow.innerHTML = `
+      <td colspan="8">
+        <div class="log-expanded-details">
+          <div class="expanded-grid">
+            <div class="expanded-item">
+              <h4>Prompt Context</h4>
+              <div class="expanded-text-block">${escapeHtml(log.prompt)}</div>
+              
+              <h4 style="margin-top: 1rem;">Response Output</h4>
+              <div class="expanded-text-block">${escapeHtml(log.response || "")}</div>
+
+              <h4 style="margin-top: 1rem;">Routing Reason</h4>
+              <div class="expanded-text-block" style="font-style: italic; color: var(--color-text-muted);">${escapeHtml(log.routing_reason || '—')}</div>
+            </div>
+            <div class="expanded-item">
+              <h4>Routing Cascade Trace</h4>
+              <div class="step-trace-list">
+                ${stepTraceHtml}
+              </div>
+              ${log.feedback_text ? `
+                <h4 style="margin-top: 1rem;">User Review</h4>
+                <div class="expanded-text-block" style="font-style: italic;">"${escapeHtml(log.feedback_text)}"</div>
+              ` : ""}
+            </div>
+          </div>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(detailRow);
+  });
 }
 
 function toggleRowDetails(logId) {
@@ -319,12 +526,11 @@ async function submitSandboxPrompt() {
   document.getElementById("result-feedback-container").style.display = "none";
   
   try {
-    const res = await fetch(`${API_BASE}/router/chat`, {
+    const res = await fetch(`${API_BASE}/router/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: promptText,
-        messages: [{ role: "user", content: promptText }],
         domain: domain,
         expected_format: format || null,
         budget_limit_usd: budget_limit_usd
@@ -425,7 +631,6 @@ async function submitSandboxPrompt() {
     }
 
     document.getElementById("sandbox-result-summary").style.display = "block";
-    
     document.getElementById("result-text").innerText = result.text;
     document.getElementById("result-feedback-container").style.display = "flex";
     document.querySelectorAll(".feedback-btn").forEach(btn => btn.classList.remove("selected"));
@@ -518,21 +723,19 @@ async function uploadKnowledgeDocument() {
       }
     }
   } catch (error) {
-    console.error("Error uploading document:", error);
+    console.error("Error uploading knowledge base document:", error);
     if (statusEl) {
       statusEl.style.color = "var(--color-error)";
-      statusEl.innerText = `Upload error: ${error.message}`;
+      statusEl.innerText = `Network or upload exception occurred.`;
     }
   }
 }
 
 async function deleteKnowledgeDocument(docId) {
-  if (!confirm("Are you sure you want to delete this document and all its indexed vector chunks?")) return;
+  if (!confirm("Are you sure you want to delete this document from the knowledge base?")) return;
   
   try {
-    const res = await fetch(`${API_BASE}/rag/documents/${docId}`, {
-      method: "DELETE"
-    });
+    const res = await fetch(`${API_BASE}/rag/documents/${docId}`, { method: "DELETE" });
     if (res.ok) {
       fetchKnowledgeBaseDocuments();
     } else {
@@ -543,39 +746,29 @@ async function deleteKnowledgeDocument(docId) {
   }
 }
 
-// Fetch Multi-Agent Pool Registry
+// Multi-Agent System Registry Management
 async function fetchAgentRegistry() {
+  const container = document.getElementById("agents-grid");
+  if (!container) return;
+  
   try {
     const res = await fetch(`${API_BASE}/agents/registry`);
     const data = await res.json();
     
-    const container = document.getElementById("agents-grid");
-    if (!container) return;
     container.innerHTML = "";
-    
-    if (!data.agents || data.agents.length === 0) {
-      container.innerHTML = `<div style="color: var(--color-text-muted);">No agents registered.</div>`;
-      return;
-    }
-    
-    const icons = {
-      coding: "fa-code",
-      research: "fa-microscope",
-      analysis: "fa-chart-pie",
-      general: "fa-bolt",
-      rag: "fa-book-bookmark",
-      reasoning: "fa-brain",
-      consensus: "fa-diagram-project"
-    };
-
-    data.agents.forEach(agent => {
+    data.agent_pool.forEach(agent => {
       const card = document.createElement("div");
       card.className = "kpi-card";
       card.style.display = "flex";
       card.style.flexDirection = "column";
       card.style.justifyContent = "space-between";
       
-      const iconClass = icons[agent.specialization] || "fa-robot";
+      let iconClass = "fa-robot";
+      if (agent.specialization === "coding") iconClass = "fa-code";
+      else if (agent.specialization === "research") iconClass = "fa-compass-drafting";
+      else if (agent.specialization === "analysis") iconClass = "fa-chart-line";
+      else if (agent.specialization === "rag") iconClass = "fa-book-bookmark";
+      else if (agent.specialization === "consensus") iconClass = "fa-users";
       
       card.innerHTML = `
         <div>
@@ -654,6 +847,48 @@ function updateDistributionChart(tierDistribution) {
         datasets: [{
           data: dataValues,
           backgroundColor: ["#10b981", "#06b6d4", "#6366f1", "#a855f7"],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom", labels: { color: "#94a3b8" } }
+        }
+      }
+    });
+  }
+}
+
+function updateDomainDistributionChart(logs) {
+  const ctx = document.getElementById("domainDistributionChart");
+  if (!ctx) return;
+
+  const domainCounts = { "General": 0, "Coding": 0, "Math": 0, "RAG / Research": 0, "Analysis": 0 };
+  logs.forEach(l => {
+    const text = (l.prompt + " " + (l.routing_reason || "")).toLowerCase();
+    if (text.includes("code") || text.includes("python") || text.includes("function")) domainCounts["Coding"]++;
+    else if (text.includes("math") || text.includes("solve") || text.includes("calc")) domainCounts["Math"]++;
+    else if (text.includes("rag") || text.includes("knowledge") || text.includes("chunk")) domainCounts["RAG / Research"]++;
+    else if (text.includes("analysis") || text.includes("log") || text.includes("metric")) domainCounts["Analysis"]++;
+    else domainCounts["General"]++;
+  });
+
+  const labels = Object.keys(domainCounts);
+  const dataValues = Object.values(domainCounts);
+
+  if (domainDistributionChartInstance) {
+    domainDistributionChartInstance.data.datasets[0].data = dataValues;
+    domainDistributionChartInstance.update();
+  } else {
+    domainDistributionChartInstance = new Chart(ctx, {
+      type: "doughnut",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: dataValues,
+          backgroundColor: ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"],
           borderWidth: 0
         }]
       },
