@@ -35,7 +35,8 @@ class RAGAgent(BaseAgent):
         prompt: str,
         messages: Optional[List[Dict[str, str]]] = None,
         expected_format: Optional[str] = None,
-        db: Optional[Session] = None
+        db: Optional[Session] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         start_time = time.time()
         retrieval_start = time.time()

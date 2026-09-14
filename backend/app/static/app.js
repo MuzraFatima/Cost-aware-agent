@@ -386,6 +386,44 @@ async function submitSandboxPrompt() {
       }
     }
 
+    // Render Evaluator Breakdown if present
+    const evalBadgesEl = document.getElementById("ss-eval-badges");
+    const evalCritiqueEl = document.getElementById("ss-eval-critique");
+    if (evalBadgesEl && result.evaluation) {
+      const ev = result.evaluation;
+      const sub = ev.sub_scores || {};
+      const synColor = (sub.syntactic >= 0.8) ? "#10b981" : ((sub.syntactic >= 0.5) ? "#f59e0b" : "#ef4444");
+      const semColor = (sub.semantic >= 0.8) ? "#10b981" : ((sub.semantic >= 0.5) ? "#f59e0b" : "#ef4444");
+      const hedColor = (sub.hedging >= 0.8) ? "#10b981" : ((sub.hedging >= 0.5) ? "#f59e0b" : "#ef4444");
+      const facColor = (sub.factuality >= 0.8) ? "#10b981" : ((sub.factuality >= 0.5) ? "#f59e0b" : "#ef4444");
+      const verdictColor = ev.verdict === "ACCEPTED" ? "#10b981" : "#f59e0b";
+
+      evalBadgesEl.innerHTML = `
+        <span style="background: rgba(255,255,255,0.06); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+          Syntactic: <strong style="color: ${synColor};">${(sub.syntactic !== undefined ? sub.syntactic : 1.0).toFixed(2)}</strong>
+        </span>
+        <span style="background: rgba(255,255,255,0.06); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+          Semantic: <strong style="color: ${semColor};">${(sub.semantic !== undefined ? sub.semantic : 1.0).toFixed(2)}</strong>
+        </span>
+        <span style="background: rgba(255,255,255,0.06); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+          Hedging: <strong style="color: ${hedColor};">${(sub.hedging !== undefined ? sub.hedging : 1.0).toFixed(2)}</strong>
+        </span>
+        <span style="background: rgba(255,255,255,0.06); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+          Factuality: <strong style="color: ${facColor};">${(sub.factuality !== undefined ? sub.factuality : 1.0).toFixed(2)}</strong>
+        </span>
+        <span style="background: rgba(255,255,255,0.06); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+          Verdict: <strong style="color: ${verdictColor};">${escapeHtml(ev.verdict)}</strong>
+        </span>
+      `;
+
+      if (ev.critique) {
+        evalCritiqueEl.style.display = "block";
+        evalCritiqueEl.innerHTML = `<strong>Escalation Critique:</strong> ${escapeHtml(ev.critique)}`;
+      } else {
+        evalCritiqueEl.style.display = "none";
+      }
+    }
+
     document.getElementById("sandbox-result-summary").style.display = "block";
     
     document.getElementById("result-text").innerText = result.text;

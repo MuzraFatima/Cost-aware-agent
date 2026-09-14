@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
 from backend.app.core.confidence import ConfidenceEvaluator
+from backend.app.core.answer_evaluator import AnswerEvaluator
+from backend.app.core.confidence_calibration import ConfidenceCalibrationService
 from backend.app.db.models import RoutingPolicy, RoutingLog, RoutingStep
 from backend.app.agents.cheap_agent import CheapAgent
 from backend.app.agents.rag_agent import RAGAgent
@@ -261,7 +263,10 @@ class RouterEngine:
                 )
                 start_tier = 3
 
-        # 5. Execution cascade loop
+        # 5. Execution cascade loop with Smart Escalation & Feedback
+        calibrated_threshold = ConfidenceCalibrationService.calibrate_threshold(
+            threshold, complexity_score, budget_pressure
+        )
         current_tier = start_tier
         steps_trace = []
         final_text = ""
@@ -269,6 +274,7 @@ class RouterEngine:
         sources = []
         rag_used = False
         retrieval_latency_ms = 0
+        last_critique = None
         
         while current_tier <= 4:
             # Check budget constraints before attempting higher tiers in cascade
@@ -289,8 +295,14 @@ class RouterEngine:
                 agent = self.specialized_agents["analysis"]
             
             try:
-                # Execute current tier
-                res = await agent.execute(prompt=prompt, messages=messages, expected_format=expected_format, db=db)
+                # Execute current tier (passing critique from previous tier if escalated)
+                res = await agent.execute(
+                    prompt=prompt,
+                    messages=messages,
+                    expected_format=expected_format,
+                    db=db,
+                    critique=last_critique
+                )
                 
                 # Check for RAG metadata in agent output
                 if res.get("rag_used"):
@@ -298,19 +310,31 @@ class RouterEngine:
                     sources = res.get("sources", [])
                     retrieval_latency_ms = res.get("retrieval_latency_ms", 0)
 
-                # Calculate confidence score
-                confidence = await ConfidenceEvaluator.calculate_confidence(
+                # Calibrated answer evaluation
+                eval_result = await AnswerEvaluator.evaluate(
                     prompt=prompt,
                     response_text=res["text"],
                     expected_format=expected_format,
-                    use_judge=False # Set to True for production active grading
+                    domain=domain,
+                    task_type=task_type,
+                    sources=sources,
+                    threshold=calibrated_threshold,
+                    use_judge=False
                 )
+                confidence = eval_result["overall_score"]
                 
                 # Track steps
                 step_record = {
                     "tier": current_tier,
                     "model_name": res["model_name"],
                     "confidence_score": confidence,
+                    "evaluation": {
+                        "overall_score": eval_result["overall_score"],
+                        "sub_scores": eval_result["sub_scores"],
+                        "verdict": eval_result["verdict"],
+                        "feedback_reasons": eval_result["feedback_reasons"],
+                        "critique": eval_result["critique_for_escalation"]
+                    },
                     "tokens_input": res["tokens_input"],
                     "tokens_output": res["tokens_output"],
                     "cost": res["cost"],
@@ -325,8 +349,10 @@ class RouterEngine:
                 final_text = res["text"]
                 
                 # Check exit condition
-                if confidence >= threshold:
+                if eval_result["verdict"] == "ACCEPTED":
                     break
+                else:
+                    last_critique = eval_result["critique_for_escalation"]
             except Exception as e:
                 # Handle agent execution failure gracefully:
                 print(f"Error executing agent Tier {current_tier}: {e}")
@@ -338,12 +364,20 @@ class RouterEngine:
                     "tier": current_tier,
                     "model_name": f"{agent.name} (FAILED)",
                     "confidence_score": 0.0,
+                    "evaluation": {
+                        "overall_score": 0.0,
+                        "sub_scores": {"syntactic": 0.0, "semantic": 0.0, "hedging": 0.0, "factuality": 0.0},
+                        "verdict": "ESCALATE",
+                        "feedback_reasons": [str(e)],
+                        "critique": f"Agent execution failed with error: {e}"
+                    },
                     "tokens_input": 0,
                     "tokens_output": 0,
                     "cost": 0.0,
                     "latency_ms": step_latency
                 }
                 steps_trace.append(step_record)
+                last_critique = f"Tier {current_tier} failed with error: {e}"
                 
             current_tier += 1
             
@@ -427,6 +461,8 @@ class RouterEngine:
             "selected_model": selected_model,
             "routing_reason": routing_reason,
             "threshold_used": threshold,
+            "calibrated_threshold": calibrated_threshold,
+            "evaluation": steps_trace[-1].get("evaluation") if steps_trace else None,
             "rag_used": rag_used,
             "sources": sources,
             "retrieval_latency_ms": retrieval_latency_ms,
