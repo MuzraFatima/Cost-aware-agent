@@ -50,3 +50,11 @@ class RoutingPolicy(Base):
     domain: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     min_confidence_threshold: Mapped[float] = mapped_column(Float, default=0.70)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+class BudgetConfig(Base):
+    __tablename__ = "budget_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    daily_budget_usd: Mapped[float] = mapped_column(Float, default=10.0)
+    monthly_budget_usd: Mapped[float] = mapped_column(Float, default=100.0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

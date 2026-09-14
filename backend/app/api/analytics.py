@@ -1,19 +1,28 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from backend.app.db.session import get_db
-from backend.app.db.models import RoutingLog, RoutingStep
+from backend.app.db.models import RoutingLog, RoutingStep, BudgetConfig
+from backend.app.utils.cost_tracker import calculate_budget_status
 
 router = APIRouter()
+
+class BudgetUpdateRequest(BaseModel):
+    daily_budget_usd: Optional[float] = Field(None, ge=0.0, description="Daily budget limit in USD")
+    monthly_budget_usd: Optional[float] = Field(None, ge=0.0, description="Monthly budget limit in USD")
 
 @router.get("/summary")
 def get_analytics_summary(db: Session = Depends(get_db)):
     """
-    Retrieves aggregated performance, cost, and routing efficiency statistics.
+    Retrieves aggregated performance, cost, budget metrics, and routing efficiency statistics.
     """
-    # 1. Total Requests
+    # 1. Calculate Budget Status
+    budget_status = calculate_budget_status(db=db)
+
+    # 2. Total Requests
     total_res = db.execute(select(func.count(RoutingLog.id)))
     total_requests = total_res.scalar() or 0
     
@@ -31,10 +40,11 @@ def get_analytics_summary(db: Session = Depends(get_db)):
                 "tier_2": 0.0,
                 "tier_3": 0.0,
                 "tier_4": 0.0
-            }
+            },
+            **budget_status
         }
         
-    # 2. Total Cost, Frontier Cost, Cost Savings, Latency
+    # 3. Total Cost, Frontier Cost, Cost Savings, Latency
     summary_res = db.execute(
         select(
             func.sum(RoutingLog.total_cost),
@@ -49,13 +59,13 @@ def get_analytics_summary(db: Session = Depends(get_db)):
     total_savings = float(total_savings or 0.0)
     avg_latency = int(avg_latency or 0)
     
-    # 3. Calculate Average Confidence of final steps
+    # 4. Calculate Average Confidence of final steps
     conf_res = db.execute(
         select(func.avg(RoutingStep.confidence_score))
     )
     avg_confidence = float(conf_res.scalar() or 0.0)
     
-    # 4. Count of runs per final tier
+    # 5. Count of runs per final tier
     tier_counts = {1: 0, 2: 0, 3: 0, 4: 0}
     for t in [1, 2, 3, 4]:
         res = db.execute(
@@ -63,7 +73,7 @@ def get_analytics_summary(db: Session = Depends(get_db)):
         )
         tier_counts[t] = res.scalar() or 0
 
-    # 5. Escalation rate: % of requests that escalated beyond Tier 1
+    # 6. Escalation rate: % of requests that escalated beyond Tier 1
     escalated_count = sum(tier_counts[t] for t in [2, 3, 4])
     escalation_rate = round(escalated_count / total_requests, 4) if total_requests > 0 else 0.0
 
@@ -72,7 +82,7 @@ def get_analytics_summary(db: Session = Depends(get_db)):
         for t in [1, 2, 3, 4]
     }
     
-    return {
+    response = {
         "total_requests": total_requests,
         "total_cost_spent": round(total_cost, 6),
         "total_estimated_frontier_cost": round(total_frontier_cost, 6),
@@ -82,6 +92,33 @@ def get_analytics_summary(db: Session = Depends(get_db)):
         "escalation_rate": escalation_rate,
         "tier_distribution": tier_dist
     }
+    response.update(budget_status)
+    return response
+
+@router.get("/budget")
+@router.post("/budget")
+@router.put("/budget")
+def update_or_get_budget(
+    request: Optional[BudgetUpdateRequest] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get or update daily/monthly budget caps in DB.
+    """
+    cfg = db.execute(select(BudgetConfig)).scalars().first()
+    if not cfg:
+        cfg = BudgetConfig(daily_budget_usd=10.0, monthly_budget_usd=100.0)
+        db.add(cfg)
+        db.flush()
+
+    if request:
+        if request.daily_budget_usd is not None:
+            cfg.daily_budget_usd = round(request.daily_budget_usd, 4)
+        if request.monthly_budget_usd is not None:
+            cfg.monthly_budget_usd = round(request.monthly_budget_usd, 4)
+        db.commit()
+
+    return calculate_budget_status(db=db)
 
 @router.get("/logs")
 def get_recent_logs(
@@ -104,7 +141,6 @@ def get_recent_logs(
     for log in logs:
         steps = []
         for step in log.steps:
-            # Determine per-step routing reason
             is_failed = "FAILED" in step.model_name
             if is_failed:
                 step_reason = f"Tier {step.tier} failed to execute — escalated automatically"
@@ -121,9 +157,7 @@ def get_recent_logs(
                 "routing_reason": step_reason
             })
 
-        # Build escalation path from step sequence
         escalation_path = [s["tier"] for s in steps]
-        # Derive routing reason from escalation
         if len(escalation_path) == 1:
             routing_reason = f"Resolved at Tier {escalation_path[0]} — confidence threshold met on first attempt"
         elif len(escalation_path) > 1:

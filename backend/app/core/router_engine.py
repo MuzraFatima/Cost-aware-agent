@@ -10,7 +10,11 @@ from backend.app.agents.cheap_agent import CheapAgent
 from backend.app.agents.rag_agent import RAGAgent
 from backend.app.agents.frontier_agent import FrontierAgent
 from backend.app.agents.consensus_agent import ConsensusAgent
-from backend.app.utils.cost_tracker import estimate_frontier_cost
+from backend.app.utils.cost_tracker import (
+    estimate_frontier_cost,
+    estimate_pre_request_cost,
+    calculate_budget_status
+)
 
 class RouterEngine:
     def __init__(self, mock_mode: bool = False):
@@ -184,27 +188,74 @@ class RouterEngine:
         """
         start_time = time.time()
         
-        # 1. Get active confidence threshold
+        # 1. Get active confidence threshold & budget status
         threshold = self.get_threshold(domain, db)
+        budget_status = calculate_budget_status(db=db)
+        budget_pressure = budget_status["budget_pressure_score"]
+        remaining_daily = budget_status["remaining_daily_budget_usd"]
         
-        # 2. Determine task classification & complexity score
+        # 2. Determine task classification & ideal starting tier
         task_type = self.classify_task_type(prompt, domain)
         complexity_score = self.calculate_complexity_score(prompt, task_type)
-        start_tier = self.classify_complexity(prompt, domain)
+        ideal_start_tier = self.classify_complexity(prompt, domain)
         
-        # 3. Execution cascade loop
+        # 3. Model selection & Pre-request cost estimation
+        ideal_model_name = getattr(self.agents[ideal_start_tier], "model", settings.TIER_1_MODEL)
+        pre_request_cost = estimate_pre_request_cost(ideal_model_name, prompt)
+        
+        # 4. Budget-aware model selection & Automatic Downgrade logic
+        start_tier = ideal_start_tier
+        downgrade_reasons = []
+
+        # Rule A: Per-request budget cap enforcement
+        if budget_limit_usd is not None and pre_request_cost > budget_limit_usd:
+            if start_tier > 1:
+                downgrade_reasons.append(
+                    f"Est. cost (${pre_request_cost:.6f}) exceeds request budget limit (${budget_limit_usd:.6f})"
+                )
+                start_tier = 1
+
+        # Rule B: Global budget pressure & daily budget cap enforcement
+        if budget_pressure >= 95 or remaining_daily <= 0.0:
+            if start_tier > 1:
+                downgrade_reasons.append(
+                    f"Critical budget pressure ({budget_pressure}/100, ${remaining_daily:.4f} remaining today)"
+                )
+                start_tier = 1
+        elif budget_pressure >= 80:
+            if start_tier >= 3:
+                downgrade_reasons.append(
+                    f"High budget pressure ({budget_pressure}/100, ${remaining_daily:.4f} remaining today)"
+                )
+                start_tier = 1 if complexity_score <= 7 else 2
+        elif budget_pressure >= 50:
+            if start_tier == 4 and complexity_score < 10:
+                downgrade_reasons.append(
+                    f"Moderate budget pressure ({budget_pressure}/100)"
+                )
+                start_tier = 3
+
+        # 5. Execution cascade loop
         current_tier = start_tier
         steps_trace = []
         final_text = ""
         total_cost = 0.0
         
         while current_tier <= 4:
+            # Check budget constraints before attempting higher tiers in cascade
+            if current_tier > start_tier:
+                if budget_pressure >= 95:
+                    print(f"[RouterEngine] Escalation stopped at Tier {current_tier} due to critical budget pressure ({budget_pressure}/100).")
+                    break
+                if budget_limit_usd is not None and total_cost >= budget_limit_usd:
+                    print(f"[RouterEngine] Escalation stopped at Tier {current_tier}: budget limit ${budget_limit_usd:.6f} reached.")
+                    break
+
             agent = self.agents[current_tier]
             
             try:
                 # Execute current tier
                 res = await agent.execute(prompt=prompt, messages=messages, expected_format=expected_format)
-
                 
                 # Calculate confidence score
                 confidence = await ConfidenceEvaluator.calculate_confidence(
@@ -235,7 +286,6 @@ class RouterEngine:
             except Exception as e:
                 # Handle agent execution failure gracefully:
                 print(f"Error executing agent Tier {current_tier}: {e}")
-                # Record the failed step with 0 confidence, 0 cost, and estimated latency
                 elapsed_so_far = sum(s["latency_ms"] for s in steps_trace)
                 total_elapsed = int((time.time() - start_time) * 1000)
                 step_latency = max(total_elapsed - elapsed_so_far, 0)
@@ -251,37 +301,42 @@ class RouterEngine:
                 }
                 steps_trace.append(step_record)
                 
-            # If confidence is too low or agent execution failed, escalate to next tier
-            # Budget guard: stop escalating if the next tier would exceed the per-request limit
-            if budget_limit_usd is not None and total_cost >= budget_limit_usd:
-                print(f"[RouterEngine] Budget limit ${budget_limit_usd:.5f} reached after Tier {current_tier}. Stopping escalation.")
-                break
             current_tier += 1
             
         if not final_text:
             raise RuntimeError("All agent tiers failed to execute and generate a response.")
             
-        # 4. Compute cost savings vs always-routing to Tier 3 (Frontier)
+        # 6. Compute cost savings vs always-routing to Tier 3 (Frontier)
         total_tokens = sum(
             s.get("tokens_input", 0) + s.get("tokens_output", 0) for s in steps_trace
         )
         frontier_cost = estimate_frontier_cost(total_tokens)
         cost_savings = max(frontier_cost - total_cost, 0.0)
 
-        selected_tier = current_tier if current_tier <= 4 else 4
+        selected_tier = steps_trace[-1]["tier"] if steps_trace else (current_tier if current_tier <= 4 else 4)
         selected_model = steps_trace[-1]["model_name"] if steps_trace else getattr(self.agents[selected_tier], "model", "groq/openai/gpt-oss-20b")
-        routing_reason = (
-            f"Classified as '{task_type}' task (complexity {complexity_score}/10). "
-            f"Initiated at Tier {start_tier} and resolved at Tier {selected_tier} ({selected_model})."
-        )
 
-        # 5. Save audit log to database if session is present
+        # 7. Construct explainable routing_reason
+        reason_parts = [
+            f"Classified as '{task_type}' task (complexity {complexity_score}/10).",
+            f"Budget pressure: {budget_pressure}/100."
+        ]
+        if downgrade_reasons:
+            reason_parts.append(
+                f"Downgraded target Tier {ideal_start_tier} → Tier {start_tier} ({'; '.join(downgrade_reasons)})."
+            )
+        else:
+            reason_parts.append(
+                f"Initiated at Tier {start_tier} and resolved at Tier {selected_tier} ({selected_model})."
+            )
+        routing_reason = " ".join(reason_parts)
+
+        # 8. Save audit log to database if session is present
         routing_log_id = None
         total_latency = int((time.time() - start_time) * 1000)
         
         if db:
             try:
-                # Create routing log entry
                 log_entry = RoutingLog(
                     prompt=prompt,
                     response=final_text,
@@ -293,10 +348,9 @@ class RouterEngine:
                     final_tier=selected_tier
                 )
                 db.add(log_entry)
-                db.flush() # populates log_entry.id
+                db.flush()
                 routing_log_id = log_entry.id
                 
-                # Create step records
                 for step in steps_trace:
                     step_entry = RoutingStep(
                         routing_log_id=routing_log_id,
@@ -321,6 +375,9 @@ class RouterEngine:
             "final_tier": selected_tier,
             "task_type": task_type,
             "complexity_score": complexity_score,
+            "budget_pressure_score": budget_pressure,
+            "remaining_daily_budget_usd": budget_status["remaining_daily_budget_usd"],
+            "pre_request_estimated_cost_usd": pre_request_cost,
             "selected_model": selected_model,
             "routing_reason": routing_reason,
             "threshold_used": threshold,
@@ -328,6 +385,9 @@ class RouterEngine:
                 "total_cost_usd": round(total_cost, 8),
                 "estimated_frontier_cost_usd": round(frontier_cost, 8),
                 "cost_savings_usd": round(cost_savings, 8),
+                "pre_request_estimated_cost_usd": pre_request_cost,
+                "budget_pressure_score": budget_pressure,
+                "remaining_daily_budget_usd": budget_status["remaining_daily_budget_usd"],
                 "total_latency_ms": total_latency,
                 "routing_path": steps_trace,
                 "budget_limit_usd": budget_limit_usd,

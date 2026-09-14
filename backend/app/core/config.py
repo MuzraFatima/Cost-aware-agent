@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     TIER_3_MODEL: str = "groq/openai/gpt-oss-120b"
     TIER_4_MODEL: str = "groq/openai/gpt-oss-120b"
 
+    # Budget settings (in USD)
+    DAILY_BUDGET_USD: float = 10.0
+    MONTHLY_BUDGET_USD: float = 100.0
+
 
     # Default confidence thresholds per domain
     DEFAULT_THRESHOLDS: Dict[str, float] = {

@@ -36,7 +36,7 @@
           <i class="fa-solid fa-flask"></i> Sandbox
         </button>
         <button class="tab-btn" onclick="switchTab(event, 'tab-policies')">
-          <i class="fa-solid fa-sliders"></i> Policies
+          <i class="fa-solid fa-sliders"></i> Policies & Budgets
         </button>
         <button class="tab-btn" onclick="switchTab(event, 'tab-logs')">
           <i class="fa-solid fa-list-check"></i> Logs
@@ -61,13 +61,35 @@
 
         <div class="kpi-card">
           <div class="kpi-header">
-            <span>Aggregated Cost Spent</span>
+            <span>Aggregated Spend Today</span>
             <div class="kpi-icon" style="background: rgba(99, 102, 241, 0.15); color: var(--color-primary);">
               <i class="fa-solid fa-receipt"></i>
             </div>
           </div>
           <div class="kpi-value" id="kpi-cost">$0.00000</div>
-          <div class="kpi-desc">Token expenditure tracking</div>
+          <div class="kpi-desc" id="kpi-daily-limit">Daily limit: $10.00</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span>Monthly Spend</span>
+            <div class="kpi-icon" style="background: rgba(168, 85, 247, 0.15); color: #a855f7;">
+              <i class="fa-solid fa-calendar-days"></i>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpi-monthly-spent">$0.00000</div>
+          <div class="kpi-desc" id="kpi-monthly-limit">Monthly limit: $100.00</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span>Budget Pressure</span>
+            <div class="kpi-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--color-error);">
+              <i class="fa-solid fa-gauge-simple-high"></i>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpi-budget-pressure" style="color: var(--color-success);">0 / 100</div>
+          <div class="kpi-desc" id="kpi-pressure-desc">Low pressure (normal routing)</div>
         </div>
 
         <div class="kpi-card">
@@ -83,13 +105,13 @@
 
         <div class="kpi-card">
           <div class="kpi-header">
-            <span>Avg Step Confidence</span>
+            <span>Avg Cost / Request</span>
             <div class="kpi-icon" style="background: rgba(245, 158, 11, 0.15); color: var(--color-warning);">
-              <i class="fa-solid fa-shield-halved"></i>
+              <i class="fa-solid fa-coins"></i>
             </div>
           </div>
-          <div class="kpi-value" id="kpi-confidence">0.00</div>
-          <div class="kpi-desc">Accepted output confidence level</div>
+          <div class="kpi-value" id="kpi-cost-per-req">$0.00000</div>
+          <div class="kpi-desc">Average per-request expense</div>
         </div>
 
         <div class="kpi-card">
@@ -147,7 +169,7 @@
           <h2>Gateway Playground</h2>
           <div class="form-group">
             <label for="sandbox-prompt">Input Prompt</label>
-            <textarea id="sandbox-prompt" class="form-textarea" placeholder="Type your instruction... (e.g. 'Solve 123 * 45' to test math escalations or 'Output user profile JSON' for schema validation tests)"></textarea>
+            <textarea id="sandbox-prompt" class="form-textarea" placeholder="Type your instruction... (e.g. 'Solve 123 * 45' to test math escalations or 'Write a Python script to sort a list')"></textarea>
           </div>
           <div class="form-group">
             <label for="sandbox-domain">Query Domain Category</label>
@@ -159,7 +181,6 @@
               <option value="analysis">Data Analysis & Parsing</option>
               <option value="creative">Creative (Low Constraint)</option>
             </select>
-
           </div>
           <div class="form-group">
             <label for="sandbox-format">Expected Format Specifier</label>
@@ -168,6 +189,10 @@
               <option value="json">Structured JSON String</option>
               <option value="python">Executable Python Snippet</option>
             </select>
+          </div>
+          <div class="form-group">
+            <label for="sandbox-budget">Per-Request Budget Cap (USD) <span style="font-weight:normal; font-size:0.8rem; color:var(--color-text-muted);">(Optional)</span></label>
+            <input type="number" id="sandbox-budget" class="form-select" placeholder="e.g. 0.0005" step="0.0001" min="0.0">
           </div>
           <button class="action-btn" onclick="submitSandboxPrompt()">
             <i class="fa-solid fa-paper-plane"></i> Run Router Gateway
@@ -196,12 +221,16 @@
                 <div class="summary-value" id="ss-confidence">—</div>
               </div>
               <div class="summary-metric">
-                <div class="summary-label"><i class="fa-solid fa-sliders"></i> Threshold</div>
-                <div class="summary-value" id="ss-threshold">—</div>
+                <div class="summary-label"><i class="fa-solid fa-calculator"></i> Est. Pre-Cost</div>
+                <div class="summary-value" id="ss-precost">—</div>
               </div>
               <div class="summary-metric">
                 <div class="summary-label"><i class="fa-solid fa-receipt"></i> Total Cost</div>
                 <div class="summary-value" id="ss-cost">—</div>
+              </div>
+              <div class="summary-metric">
+                <div class="summary-label"><i class="fa-solid fa-gauge-simple-high"></i> Pressure Score</div>
+                <div class="summary-value" id="ss-pressure">—</div>
               </div>
               <div class="summary-metric">
                 <div class="summary-label"><i class="fa-solid fa-gauge-high"></i> Latency</div>
@@ -236,8 +265,28 @@
       </div>
     </div>
 
-    <!-- TAB 3: Policy Config Plane -->
+    <!-- TAB 3: Policy Config & Budget Plane -->
     <div id="tab-policies" class="tab-panel">
+      <div class="panel-card" style="margin-bottom: 1.5rem;">
+        <h2>Global Budget Intelligence Limits</h2>
+        <p style="color: var(--color-text-muted); margin-bottom: 1.5rem; font-size: 0.9rem;">
+          Configure daily and monthly spend limits in USD. When budget pressure score (0–100) crosses 80+, CAAR automatically downgrades model selections to preserve budget.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+          <div class="form-group">
+            <label for="cfg-daily-budget">Daily Budget Limit (USD)</label>
+            <input type="number" id="cfg-daily-budget" class="form-select" value="10.0" step="1.0" min="0.1">
+          </div>
+          <div class="form-group">
+            <label for="cfg-monthly-budget">Monthly Budget Limit (USD)</label>
+            <input type="number" id="cfg-monthly-budget" class="form-select" value="100.0" step="5.0" min="1.0">
+          </div>
+        </div>
+        <button class="action-btn" style="width: auto; padding: 0.6rem 1.5rem;" onclick="saveBudgetLimits()">
+          <i class="fa-solid fa-floppy-disk"></i> Save Budget Caps
+        </button>
+      </div>
+
       <div class="panel-card">
         <h2>Manual Confidence Routing Policy Adjustments</h2>
         <p style="color: var(--color-text-muted); margin-bottom: 1.5rem; font-size: 0.9rem;">

@@ -74,3 +74,8 @@ def init_db() -> None:
         print(f"Error seeding database: {e}")
     finally:
         db.close()
+
+try:
+    init_db()
+except Exception as _e:
+    pass

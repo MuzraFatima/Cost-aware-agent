@@ -23,6 +23,10 @@ class ConsensusAgent(BaseAgent):
         self._model_cheap = value
 
     @property
+    def model(self) -> str:
+        return "Consensus Loop"
+
+    @property
     def model_frontier(self) -> str:
         return self._model_frontier or settings.TIER_4_MODEL
 
