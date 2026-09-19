@@ -31,7 +31,8 @@ async function checkProviderStatus() {
   try {
     const res = await fetch(`${API_BASE}/agents/registry`);
     const data = await res.json();
-    const isLive = data.agent_pool && data.agent_pool.some(a => a.status === "live");
+    const agents = data.agents || data.agent_pool || [];
+    const isLive = agents.some(a => a.status === "live");
 
     if (isLive) {
       badge.className = "provider-status-badge live";
@@ -43,6 +44,60 @@ async function checkProviderStatus() {
   } catch (err) {
     badge.className = "provider-status-badge mock";
     textEl.innerText = "Offline / Standby";
+  }
+}
+
+// Fetch Multi-Agent Registry
+async function fetchAgentRegistry() {
+  const container = document.getElementById("agents-grid");
+  if (!container) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/agents/registry`);
+    const data = await res.json();
+    const agents = data.agents || [];
+
+    if (!agents.length) {
+      container.innerHTML = `<div style="color: var(--color-text-muted); padding: 1rem;">No agents found.</div>`;
+      return;
+    }
+
+    container.innerHTML = agents.map(agent => `
+      <div class="kpi-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div class="kpi-header">
+            <span style="font-weight: 700; font-size: 1rem; color: var(--color-text);">${escapeHtml(agent.name)}</span>
+            <span class="badge ${agent.status === 'live' ? 'badge-live' : 'badge-mock'}" style="font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 9999px; background: ${agent.status === 'live' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${agent.status === 'live' ? 'var(--color-success)' : 'var(--color-error)'}; font-weight: 600;">
+              ${agent.status === 'live' ? '● Groq Live' : '○ Mock'}
+            </span>
+          </div>
+          <div style="font-size: 0.82rem; color: var(--color-text-muted); margin: 0.6rem 0;">
+            ${escapeHtml(agent.description)}
+          </div>
+        </div>
+        <div style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.06); font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.35rem;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--color-text-muted);">Tier:</span>
+            <span style="font-weight: 600; color: var(--color-primary);">Tier ${agent.tier}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--color-text-muted);">Model:</span>
+            <span style="font-family: monospace; font-size: 0.78rem; color: #a5b4fc;">${escapeHtml(agent.model_name)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--color-text-muted);">Cost Profile:</span>
+            <span style="color: var(--color-warning);">${escapeHtml(agent.cost_tier)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--color-text-muted);">Provider:</span>
+            <span style="color: var(--color-success); font-weight: 600;">${escapeHtml(agent.provider || 'Groq')}</span>
+          </div>
+        </div>
+      </div>
+    `).join("");
+  } catch (err) {
+    console.error("Error fetching agent registry:", err);
+    container.innerHTML = `<div style="color: var(--color-error); padding: 1rem;">Failed to load agent registry.</div>`;
   }
 }
 

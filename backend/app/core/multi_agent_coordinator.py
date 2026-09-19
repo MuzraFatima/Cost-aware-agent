@@ -9,6 +9,7 @@ from backend.app.agents.consensus_agent import ConsensusAgent
 from backend.app.agents.coding_agent import CodingAgent
 from backend.app.agents.research_agent import ResearchAgent
 from backend.app.agents.analysis_agent import AnalysisAgent
+from backend.app.core.config import settings
 
 class MultiAgentCoordinator:
     """
@@ -51,6 +52,7 @@ class MultiAgentCoordinator:
         """
         Returns metadata registry of all active specialized agents in the system pool.
         """
+        is_live = not settings.is_mock_mode
         registry = [
             {
                 "id": "agent-cheap",
@@ -59,7 +61,9 @@ class MultiAgentCoordinator:
                 "specialization": "general",
                 "model_name": self.specialized_agents["general"].model,
                 "description": "Fast, commodity model for simple Q&A, greetings, and basic facts.",
-                "cost_tier": "Low ($0.0001 / 1k tokens)"
+                "cost_tier": "Low ($0.0001 / 1k tokens)",
+                "provider": "Groq",
+                "status": "live" if is_live else "mock"
             },
             {
                 "id": "agent-rag",
@@ -68,7 +72,9 @@ class MultiAgentCoordinator:
                 "specialization": "rag",
                 "model_name": self.specialized_agents["rag"].model,
                 "description": "Vector-retrieval agent for document Q&A and knowledge base citations.",
-                "cost_tier": "Balanced ($0.0002 / 1k tokens)"
+                "cost_tier": "Balanced ($0.0002 / 1k tokens)",
+                "provider": "Groq",
+                "status": "live" if is_live else "mock"
             },
             {
                 "id": "agent-analysis",
@@ -77,7 +83,9 @@ class MultiAgentCoordinator:
                 "specialization": "analysis",
                 "model_name": self.specialized_agents["analysis"].model,
                 "description": "Data analytics, log parsing, dataset statistics, and structured metrics.",
-                "cost_tier": "Balanced ($0.0002 / 1k tokens)"
+                "cost_tier": "Balanced ($0.0002 / 1k tokens)",
+                "provider": "Groq",
+                "status": "live" if is_live else "mock"
             },
             {
                 "id": "agent-coding",
@@ -86,7 +94,9 @@ class MultiAgentCoordinator:
                 "specialization": "coding",
                 "model_name": self.specialized_agents["coding"].model,
                 "description": "Software synthesis, syntax validation, unit test writing, and refactoring.",
-                "cost_tier": "High ($0.0008 / 1k tokens)"
+                "cost_tier": "High ($0.0008 / 1k tokens)",
+                "provider": "Groq",
+                "status": "live" if is_live else "mock"
             },
             {
                 "id": "agent-research",
@@ -95,7 +105,9 @@ class MultiAgentCoordinator:
                 "specialization": "research",
                 "model_name": self.specialized_agents["research"].model,
                 "description": "System design, security audits, technical trade-offs, and research reports.",
-                "cost_tier": "High ($0.0008 / 1k tokens)"
+                "cost_tier": "High ($0.0008 / 1k tokens)",
+                "provider": "Groq",
+                "status": "live" if is_live else "mock"
             },
             {
                 "id": "agent-frontier",
@@ -104,7 +116,9 @@ class MultiAgentCoordinator:
                 "specialization": "reasoning",
                 "model_name": self.specialized_agents["frontier"].model,
                 "description": "High-capacity frontier model for multi-step reasoning and complex tasks.",
-                "cost_tier": "High ($0.0008 / 1k tokens)"
+                "cost_tier": "High ($0.0008 / 1k tokens)",
+                "provider": "Groq",
+                "status": "live" if is_live else "mock"
             },
             {
                 "id": "agent-consensus",
@@ -113,7 +127,9 @@ class MultiAgentCoordinator:
                 "specialization": "consensus",
                 "model_name": self.specialized_agents["consensus"].model,
                 "description": "Multi-agent cross-verification and synthesis loop for high-stakes queries.",
-                "cost_tier": "Premium ($0.0020 / 1k tokens)"
+                "cost_tier": "Premium ($0.0020 / 1k tokens)",
+                "provider": "Groq",
+                "status": "live" if is_live else "mock"
             }
         ]
         return registry

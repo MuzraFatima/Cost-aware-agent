@@ -30,44 +30,51 @@ litellm.telemetry = False
 # ---------------------------------------------------------------------------
 
 def _push_keys() -> None:
-    """Set provider API keys on LiteLLM and in the process environment."""
+    """Set Groq provider API key on LiteLLM and in the process environment."""
+    # Groq (Exclusive provider)
+    if settings.GROQ_API_KEY and settings.GROQ_API_KEY != "mock-groq-key":
+        litellm.groq_key = settings.GROQ_API_KEY
+        litellm.api_key = settings.GROQ_API_KEY
+        os.environ["GROQ_API_KEY"] = settings.GROQ_API_KEY
 
-    # OpenAI
+    # Non-Groq providers explicitly reset to avoid routing outside Groq
     if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != "mock-openai-key":
         litellm.openai_key = settings.OPENAI_API_KEY
-        litellm.api_key = settings.OPENAI_API_KEY
         os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
 
-    # Anthropic
     if settings.ANTHROPIC_API_KEY and settings.ANTHROPIC_API_KEY != "mock-anthropic-key":
         litellm.anthropic_key = settings.ANTHROPIC_API_KEY
         os.environ["ANTHROPIC_API_KEY"] = settings.ANTHROPIC_API_KEY
 
-    # Google / Gemini
     if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY != "mock-gemini-key":
         litellm.gemini_key = settings.GEMINI_API_KEY
         os.environ["GEMINI_API_KEY"] = settings.GEMINI_API_KEY
         os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
 
-    # Groq
-    if settings.GROQ_API_KEY and settings.GROQ_API_KEY != "mock-groq-key":
-        litellm.groq_key = settings.GROQ_API_KEY
-        os.environ["GROQ_API_KEY"] = settings.GROQ_API_KEY
-
-
 
 def format_model_name(model_name: str) -> str:
     """
-    Ensures model names are properly prefixed for LiteLLM.
-    If GROQ_API_KEY is configured and model starts with openai/gpt-oss- or is a Groq model,
-    prefixes with groq/ so LiteLLM routes to Groq API instead of OpenAI.
+    Ensures model names are properly formatted to route exclusively via Groq API.
+    Maps legacy generic or provider model IDs to their Groq equivalents.
     """
     if not model_name:
-        return model_name
-    if settings.GROQ_API_KEY and settings.GROQ_API_KEY != "mock-groq-key":
-        if model_name.startswith("openai/gpt-oss-") or model_name.startswith("gpt-oss-"):
-            if not model_name.startswith("groq/"):
-                return f"groq/{model_name}"
+        return settings.TIER_1_MODEL
+
+    model_mapping = {
+        "gpt-4o-mini": "groq/openai/gpt-oss-20b",
+        "gpt-4o": "groq/openai/gpt-oss-120b",
+        "gpt-3.5-turbo": "groq/openai/gpt-oss-20b",
+        "claude-3-haiku": "groq/openai/gpt-oss-20b",
+        "claude-3-5-sonnet": "groq/openai/gpt-oss-120b",
+        "gemini-1.5-flash": "groq/openai/gpt-oss-20b",
+        "gemini-1.5-pro": "groq/openai/gpt-oss-120b",
+    }
+    clean = model_name.split("/")[-1].lower()
+    if clean in model_mapping:
+        return model_mapping[clean]
+
+    if not model_name.startswith("groq/"):
+        return f"groq/{model_name}"
     return model_name
 
 

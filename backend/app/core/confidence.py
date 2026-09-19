@@ -5,6 +5,8 @@ from typing import Dict, Any, Optional
 
 from backend.app.core.answer_evaluator import AnswerEvaluator, HEDGING_KEYWORDS
 
+from backend.app.utils.llm_client import _push_keys, format_model_name
+
 class ConfidenceEvaluator:
     @staticmethod
     def evaluate_syntactic(response_text: str, expected_format: Optional[str] = None) -> float:
@@ -26,7 +28,7 @@ class ConfidenceEvaluator:
         return score
 
     @staticmethod
-    async def evaluate_llm_judge(prompt: str, response_text: str, judge_model: str = "gpt-4o-mini") -> float:
+    async def evaluate_llm_judge(prompt: str, response_text: str, judge_model: str = "groq/openai/gpt-oss-20b") -> float:
         """
         Calls an LLM judge to evaluate response accuracy and alignment with the prompt.
         Runs asynchronously. Returns a confidence score between 0.0 and 1.0.
@@ -52,10 +54,12 @@ MODEL RESPONSE:
 {response_text}
 """
         try:
+            _push_keys()
+            target_model = format_model_name(judge_model)
             res = await litellm.acompletion(
-                model=judge_model,
+                model=target_model,
                 messages=[{"role": "user", "content": judge_prompt}],
-                max_tokens=5,
+                max_tokens=25,
                 temperature=0.0
             )
             val_text = res.choices[0].message.content.strip()
@@ -73,7 +77,7 @@ MODEL RESPONSE:
         response_text: str,
         expected_format: Optional[str] = None,
         use_judge: bool = False,
-        judge_model: str = "gpt-4o-mini",
+        judge_model: str = "groq/openai/gpt-oss-20b",
         domain: str = "general"
     ) -> float:
         """
