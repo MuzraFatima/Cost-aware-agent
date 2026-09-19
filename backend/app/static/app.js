@@ -20,6 +20,39 @@ async function initializeDashboard() {
   await fetchPolicies();
   await fetchCalibrationWeights();
   await fetchLogs();
+
+  // Handle URL hash navigation (e.g. #sandbox or #agents)
+  if (window.location.hash) {
+    const raw = window.location.hash.replace('#', '');
+    const tabName = raw.split('?')[0];
+    const targetPanel = document.getElementById(`tab-${tabName}`);
+    const targetBtn = document.querySelector(`[onclick*="tab-${tabName}"]`);
+    if (targetPanel && targetBtn) {
+      document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach(panel => panel.classList.remove("active"));
+      targetBtn.classList.add("active");
+      targetPanel.classList.add("active");
+      if (tabName === 'agents') fetchAgentRegistry();
+      if (tabName === 'sandbox') {
+        if (raw.includes('accepted=true')) {
+          const promptEl = document.getElementById("sandbox-prompt");
+          const domainEl = document.getElementById("sandbox-domain");
+          const formatEl = document.getElementById("sandbox-format");
+          if (promptEl && domainEl && formatEl) {
+            promptEl.value = "Explain the difference between supervised and unsupervised learning in two concise sentences.";
+            domainEl.value = "general";
+            formatEl.value = "";
+          }
+        } else {
+          applyPreset('coding');
+        }
+        if (raw.includes('autorun=true')) {
+          setTimeout(() => { submitSandboxPrompt(); }, 400);
+        }
+      }
+      if (tabName === 'rag') fetchKnowledgeBaseDocuments();
+    }
+  }
 }
 
 // Check Gateway Provider Live Status

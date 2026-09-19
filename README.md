@@ -97,6 +97,27 @@ flowchart TD
 
 ---
 
+## 📸 Live Dashboard & Visual Demo
+
+The Cost-Aware Agent Router includes an interactive, zero-dependency Single Page Application (SPA) dashboard running at `http://localhost:8000/`.
+
+### 1. Real-Time Analytics & KPI Metrics
+Visualizes aggregated token expenditure, daily/monthly budget caps, dynamic budget pressure gauges, cost savings vs. frontier-only baselines, average latency, and tier distributions.
+
+![CAAR Analytics Dashboard](docs/dashboard_analytics.png)
+
+### 2. Gateway Playground & Accepted Routing Cascade Audit
+Demonstrates live query execution with 100% calibrated confidence, `PASS (ACCEPTED)` verification, sub-second latency (578ms), and minimal cost ($0.000072) via Groq API.
+
+![CAAR Sandbox Gateway Playground](docs/dashboard_sandbox.png)
+
+### 3. Multi-Agent Fleet & Specialization Pool
+Inspects active specialized domain agents, active model bindings, latency profiles, cost tiers, and live provider connection status.
+
+![CAAR Multi-Agent Fleet](docs/dashboard_agents.png)
+
+---
+
 ## 🏗️ System Architecture
 
 CAAR is structured into modular layers separating API routing, orchestration logic, agent implementations, evaluation, and data storage.
@@ -346,31 +367,38 @@ Once running, access the services:
 
 ---
 
-## 🔑 Optional LLM API Configuration
+## 🔑 LLM API Configuration (Groq & Multi-Provider)
 
-CAAR is **zero-config by default**. If no API keys are provided, the system seamlessly operates in **mock/sandbox mode**, using deterministic response generators with simulated latency and token costs.
+CAAR operates with **zero configuration out-of-the-box in Mock Mode**. If no keys are provided, the system executes deterministic offline simulations with realistic simulated latency and token costs.
 
-To connect live frontier models (OpenAI, Anthropic, Google Gemini):
+### Live High-Speed Inference with Groq API
+The system is natively optimized for **Groq API** for ultra-fast, cost-effective inference:
 
-1. Copy `.env.example` to `.env`:
+1. Copy `.env.example` to `.env` (or edit existing `.env`):
    ```powershell
    Copy-Item .env.example .env
    ```
-2. Populate the desired provider keys inside `.env`:
+2. Set your `GROQ_API_KEY` inside `.env`:
    ```ini
-   # Optional: Provide at least one API key to enable live model routing
-   OPENAI_API_KEY=sk-...
-   ANTHROPIC_API_KEY=sk-ant-...
-   GEMINI_API_KEY=AI...
+   # Groq API Key (High-throughput, low-latency live inference)
+   GROQ_API_KEY=gsk_...
+
+   # Groq Model per Tier
+   TIER_1_MODEL=groq/openai/gpt-oss-20b
+   TIER_2_MODEL=groq/openai/gpt-oss-20b
+   TIER_3_MODEL=groq/openai/gpt-oss-120b
+   TIER_4_MODEL=groq/openai/gpt-oss-120b
    ```
 
-*(Note: Live keys are strictly optional. Never commit actual secret keys to source control. `.env` is ignored by Git).*
+When `GROQ_API_KEY` is configured, CAAR immediately transitions to live mode and the dashboard header displays **`● Groq Live API Connected`**.
+
+*(Note: Live keys are strictly optional. Never commit `.env` containing live credentials to git).*
 
 ---
 
 ## 📈 Running Tests
 
-Execute the full automated test suite:
+Execute the full automated test suite verifying routing policies, API endpoints, LLM integration, and benchmark validators:
 
 ```powershell
 python -m pytest
@@ -396,24 +424,43 @@ The script evaluates the 20 benchmark queries across Tier-1-Only, Highest-Tier-O
 
 ---
 
-## 🖥️ Dashboard & API
+## 🖥️ Interactive Dashboard & API Control Plane
 
-### Interactive Dashboard
+The web application served at `http://localhost:8000/` provides a comprehensive 6-tab control plane:
 
-The dashboard served at `http://localhost:8000/` provides a comprehensive control plane:
-* **Analytics Tab**: Real-time KPI summary cards (Total Requests, Aggregated Spend, Net Cost Savings, Escalation Rate) and tier distribution visualization.
-* **Sandbox Tab**: Interactive prompt sandbox with real-time step cascade visualization and full routing reasoning.
-* **Policies Tab**: Dynamic sliders for adjusting per-domain confidence thresholds (`general`, `coding`, `math`, `creative`) persisted immediately to SQLite.
-* **Logs Tab**: Searchable routing audit logs with expandable per-step execution traces.
+* ⚡ **Analytics Tab**: Real-time KPI summary cards (Total Requests, Aggregated Spend Today, Monthly Spend, Budget Pressure Gauge 0–100, Estimated Savings vs. Frontier-only, Average Latency, Escalation Rate) and interactive Chart.js visualizations (Cumulative Cost Savings, Tier Distribution, and Task Domain Share).
+* 🧪 **Sandbox Tab (Gateway Playground)**: Interactive testing environment featuring quick-start preset chips (`Coding`, `Math`, `RAG Query`, `Analysis`, `JSON Escalation`), domain selector, format enforcement (`JSON`, `Python`), optional per-request budget caps, real-time step cascade visualization, calibrated confidence scoring, and one-click output clipboard copying with user feedback ratings.
+* 📖 **Knowledge Base (RAG) Tab**: Document upload and vector indexing manager supporting `.txt`, `.md`, `.pdf`, `.json`, and `.csv`. Inspect indexed chunks, sizes, and ingestion timestamps powering Tier 2 context retrieval.
+* 👥 **Multi-Agent System Tab**: Live fleet overview displaying all 7 specialized agents (Cheap Direct Agent, Augmented RAG Agent, Specialized Analysis Agent, Specialized Coding Agent, Specialized Research Agent, Frontier Reasoning Agent, Consensus Loop Agent) with model bindings, cost profiles, and live Groq connection status badges.
+* ⚙️ **Policies & Budgets Tab**: Global daily and monthly budget limit configuration with dynamic budget pressure throttling (auto-downgrading tiers when pressure > 80), domain confidence calibration sliders (Syntactic, Semantic, Hedging, Factuality weights), and per-domain minimum confidence threshold sliders persisted directly to SQLite.
+* 📋 **Logs Tab**: Real-time searchable and tier-filterable audit log table. Expand any row (`▶`) to inspect full prompts, generated outputs, per-step latency, token counts, and step-by-step tier escalation reasons.
 
-### Swagger / OpenAPI UI
+### Interactive Swagger / OpenAPI Documentation
 
-The interactive OpenAPI documentation at `http://localhost:8000/docs` allows direct invocation and schema inspection for all endpoints:
-* `POST /api/v1/router/completions`: Dispatches queries through the confidence cascade.
-* `POST /api/v1/router/feedback`: Records feedback to dynamically adapt routing thresholds.
-* `GET /api/v1/analytics/summary`: Fetches aggregated cost, latency, and distribution KPIs.
+The OpenAPI interface at `http://localhost:8000/docs` allows schema validation and endpoint testing:
+* `POST /api/v1/router/completions`: Dispatches queries through the dynamic confidence cascade.
+* `POST /api/v1/router/feedback`: Records user thumbs-up/thumbs-down feedback.
+* `GET /api/v1/agents/registry`: Returns real-time status and metadata for all specialized agents.
+* `GET /api/v1/analytics/summary`: Fetches aggregated cost, latency, budget pressure, and distribution KPIs.
 * `GET /api/v1/analytics/logs`: Queries paginated routing history and step traces.
-* `GET / PUT /api/v1/config/policies`: Reads and updates active domain confidence thresholds.
+* `GET / POST /api/v1/config/policies`: Reads and updates active domain confidence thresholds.
+* `POST /api/v1/rag/upload`: Ingests documents into the knowledge base vector store.
+
+---
+
+## 🔧 Troubleshooting
+
+### Windows Port 8000 Binding Error (`[WinError 10013]`)
+If Uvicorn exits with `[WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions`, port `8000` is already in use by another instance or process:
+
+1. **Terminate the existing background process**:
+   ```powershell
+   Stop-Process -Id (Get-NetTCPConnection -LocalPort 8000).OwningProcess -Force
+   ```
+2. **Or run on an alternate port**:
+   ```powershell
+   python -m uvicorn backend.app.main:app --port 8001 --reload
+   ```
 
 ---
 
