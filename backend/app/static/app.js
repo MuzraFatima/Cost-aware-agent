@@ -15,6 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function initializeDashboard() {
+  initializeTheme();
   checkProviderStatus();
   await fetchSummary();
   await fetchPolicies();
@@ -136,11 +137,21 @@ async function fetchAgentRegistry() {
 
 // Tab Switching Mechanism
 function switchTab(event, panelId) {
+  if (event) {
+    if (typeof event.preventDefault === "function") event.preventDefault();
+    if (typeof event.stopPropagation === "function") event.stopPropagation();
+  }
   document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
   document.querySelectorAll(".tab-panel").forEach(panel => panel.classList.remove("active"));
   
-  event.currentTarget.classList.add("active");
-  document.getElementById(panelId).classList.add("active");
+  if (event && event.currentTarget) {
+    event.currentTarget.classList.add("active");
+  } else {
+    const fallbackBtn = document.querySelector(`[onclick*="${panelId}"]`);
+    if (fallbackBtn) fallbackBtn.classList.add("active");
+  }
+  const panel = document.getElementById(panelId);
+  if (panel) panel.classList.add("active");
   
   if (panelId === 'tab-analytics') {
     fetchSummary();
@@ -271,7 +282,8 @@ async function fetchSummary() {
 }
 
 // Save Budget Limits
-async function saveBudgetLimits() {
+async function saveBudgetLimits(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
   const dailyVal = parseFloat(document.getElementById("cfg-daily-budget").value);
   const monthlyVal = parseFloat(document.getElementById("cfg-monthly-budget").value);
   
@@ -357,7 +369,8 @@ function onWeightSliderChange(domain, dimension, val) {
   activeCalibrationWeights[domain][dimension] = parseFloat(val) / 100.0;
 }
 
-async function saveCalibrationWeights() {
+async function saveCalibrationWeights(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
   try {
     for (const domain of Object.keys(activeCalibrationWeights)) {
       const weights = activeCalibrationWeights[domain];
@@ -585,7 +598,8 @@ function toggleRowDetails(logId) {
 }
 
 // Sandbox Prompt Submission
-async function submitSandboxPrompt() {
+async function submitSandboxPrompt(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
   const promptText = document.getElementById("sandbox-prompt").value;
   const domain = document.getElementById("sandbox-domain").value;
   const format = document.getElementById("sandbox-format").value;
@@ -759,7 +773,7 @@ async function fetchKnowledgeBaseDocuments() {
         <td><span class="tier-pill t2">${doc.chunk_count} chunks</span></td>
         <td style="font-size: 0.8rem; color: var(--color-text-muted);">${dateStr}</td>
         <td>
-          <button class="action-btn" style="background: rgba(239, 68, 68, 0.2); color: var(--color-error); border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="deleteKnowledgeDocument('${doc.id}')">
+          <button type="button" class="action-btn" style="background: rgba(239, 68, 68, 0.2); color: var(--color-error); border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="deleteKnowledgeDocument('${doc.id}', event)">
             <i class="fa-solid fa-trash"></i> Delete
           </button>
         </td>
@@ -771,7 +785,8 @@ async function fetchKnowledgeBaseDocuments() {
   }
 }
 
-async function uploadKnowledgeDocument() {
+async function uploadKnowledgeDocument(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
   const fileInput = document.getElementById("rag-file-input");
   const statusEl = document.getElementById("rag-upload-status");
   
@@ -819,7 +834,8 @@ async function uploadKnowledgeDocument() {
   }
 }
 
-async function deleteKnowledgeDocument(docId) {
+async function deleteKnowledgeDocument(docId, event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
   if (!confirm("Are you sure you want to delete this document from the knowledge base?")) return;
   
   try {
@@ -884,7 +900,8 @@ async function fetchAgentRegistry() {
   }
 }
 
-async function submitSandboxFeedback(scoreValue) {
+async function submitSandboxFeedback(scoreValue, event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
   if (!activeLogIdForFeedback) return;
   
   document.querySelectorAll(".feedback-btn").forEach(btn => btn.classList.remove("selected"));
@@ -912,6 +929,62 @@ async function submitSandboxFeedback(scoreValue) {
   }
 }
 
+// ==========================================================================
+// Theme Management (Light / Dark Theme Support)
+// ==========================================================================
+function isLightTheme() {
+  return document.documentElement.getAttribute("data-theme") === "light";
+}
+
+function initializeTheme() {
+  const currentTheme = localStorage.getItem("caar-theme") || "light";
+  document.documentElement.setAttribute("data-theme", currentTheme);
+  updateThemeIcon(currentTheme);
+}
+
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
+  const newTheme = currentTheme === "light" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", newTheme);
+  localStorage.setItem("caar-theme", newTheme);
+  updateThemeIcon(newTheme);
+  refreshChartsTheme();
+}
+
+function updateThemeIcon(theme) {
+  const icon = document.getElementById("theme-toggle-icon");
+  const btn = document.getElementById("theme-toggle-btn");
+  if (!icon) return;
+  if (theme === "light") {
+    icon.className = "fa-solid fa-moon";
+    if (btn) btn.title = "Switch to Dark Theme";
+  } else {
+    icon.className = "fa-solid fa-sun";
+    if (btn) btn.title = "Switch to Light Theme";
+  }
+}
+
+function refreshChartsTheme() {
+  const legendColor = isLightTheme() ? "#475569" : "#94a3b8";
+  const gridColor = isLightTheme() ? "#e2e8f0" : "rgba(255,255,255,0.05)";
+
+  if (tierDistributionChartInstance) {
+    tierDistributionChartInstance.options.plugins.legend.labels.color = legendColor;
+    tierDistributionChartInstance.update();
+  }
+  if (domainDistributionChartInstance) {
+    domainDistributionChartInstance.options.plugins.legend.labels.color = legendColor;
+    domainDistributionChartInstance.update();
+  }
+  if (costSavingsChartInstance) {
+    costSavingsChartInstance.options.plugins.legend.labels.color = legendColor;
+    costSavingsChartInstance.options.scales.x.ticks.color = "#64748b";
+    costSavingsChartInstance.options.scales.y.ticks.color = "#64748b";
+    costSavingsChartInstance.options.scales.y.grid.color = gridColor;
+    costSavingsChartInstance.update();
+  }
+}
+
 function updateDistributionChart(tierDistribution) {
   const ctx = document.getElementById("tierDistributionChart");
   if (!ctx) return;
@@ -924,8 +997,11 @@ function updateDistributionChart(tierDistribution) {
     tierDistribution.tier_4 || 0
   ];
   
+  const legendColor = isLightTheme() ? "#475569" : "#94a3b8";
+  
   if (tierDistributionChartInstance) {
     tierDistributionChartInstance.data.datasets[0].data = dataValues;
+    tierDistributionChartInstance.options.plugins.legend.labels.color = legendColor;
     tierDistributionChartInstance.update();
   } else {
     tierDistributionChartInstance = new Chart(ctx, {
@@ -942,7 +1018,7 @@ function updateDistributionChart(tierDistribution) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: "bottom", labels: { color: "#94a3b8" } }
+          legend: { position: "bottom", labels: { color: legendColor } }
         }
       }
     });
@@ -965,9 +1041,11 @@ function updateDomainDistributionChart(logs) {
 
   const labels = Object.keys(domainCounts);
   const dataValues = Object.values(domainCounts);
+  const legendColor = isLightTheme() ? "#475569" : "#94a3b8";
 
   if (domainDistributionChartInstance) {
     domainDistributionChartInstance.data.datasets[0].data = dataValues;
+    domainDistributionChartInstance.options.plugins.legend.labels.color = legendColor;
     domainDistributionChartInstance.update();
   } else {
     domainDistributionChartInstance = new Chart(ctx, {
@@ -984,7 +1062,7 @@ function updateDomainDistributionChart(logs) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: "bottom", labels: { color: "#94a3b8" } }
+          legend: { position: "bottom", labels: { color: legendColor } }
         }
       }
     });
@@ -1004,9 +1082,14 @@ function updateSavingsChart(logs) {
     return cumulativeActual;
   });
   
+  const legendColor = isLightTheme() ? "#475569" : "#94a3b8";
+  const gridColor = isLightTheme() ? "#e2e8f0" : "rgba(255,255,255,0.05)";
+  
   if (costSavingsChartInstance) {
     costSavingsChartInstance.data.labels = labels;
     costSavingsChartInstance.data.datasets[0].data = actualCosts;
+    costSavingsChartInstance.options.plugins.legend.labels.color = legendColor;
+    costSavingsChartInstance.options.scales.y.grid.color = gridColor;
     costSavingsChartInstance.update();
   } else {
     costSavingsChartInstance = new Chart(ctx, {
@@ -1017,8 +1100,8 @@ function updateSavingsChart(logs) {
           {
             label: "Cumulative Actual Cost ($)",
             data: actualCosts,
-            borderColor: "#6366f1",
-            backgroundColor: "rgba(99, 102, 241, 0.1)",
+            borderColor: "#4f46e5",
+            backgroundColor: "rgba(79, 70, 229, 0.1)",
             fill: true,
             tension: 0.3
           }
@@ -1029,10 +1112,10 @@ function updateSavingsChart(logs) {
         maintainAspectRatio: false,
         scales: {
           x: { ticks: { color: "#64748b" }, grid: { display: false } },
-          y: { ticks: { color: "#64748b" }, grid: { color: "rgba(255,255,255,0.05)" } }
+          y: { ticks: { color: "#64748b" }, grid: { color: gridColor } }
         },
         plugins: {
-          legend: { position: "bottom", labels: { color: "#94a3b8" } }
+          legend: { position: "bottom", labels: { color: legendColor } }
         }
       }
     });
@@ -1048,3 +1131,4 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+

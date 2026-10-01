@@ -55,3 +55,34 @@ def update_policy(
         "domain": request.domain,
         "new_threshold": policy.min_confidence_threshold
     }
+
+class DomainPolicyUpdateRequest(BaseModel):
+    min_confidence_threshold: float = Field(..., ge=0.0, le=1.0, description="The minimum confidence value")
+
+@router.put("/policies/{domain}")
+def update_policy_by_domain(
+    domain: str,
+    request: DomainPolicyUpdateRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Updates confidence threshold for a specific domain via URL path.
+    """
+    result = db.execute(select(RoutingPolicy).where(RoutingPolicy.domain == domain))
+    policy = result.scalars().first()
+    
+    if not policy:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Policy domain '{domain}' not found"
+        )
+        
+    policy.min_confidence_threshold = round(request.min_confidence_threshold, 2)
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": f"Updated {domain} confidence threshold successfully",
+        "domain": domain,
+        "new_threshold": policy.min_confidence_threshold
+    }

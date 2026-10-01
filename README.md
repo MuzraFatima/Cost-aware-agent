@@ -111,10 +111,10 @@ Demonstrates live query execution with 100% calibrated confidence, `PASS (ACCEPT
 
 ![CAAR Sandbox Gateway Playground](docs/dashboard_sandbox.png)
 
-### 3. Multi-Agent Fleet & Specialization Pool
-Inspects active specialized domain agents, active model bindings, latency profiles, cost tiers, and live provider connection status.
+### 3. Policies & Budget Control Plane
+Configures global daily and monthly spend limits, domain confidence calibration weights (Syntactic, Semantic, Hedging, Factuality), and manual minimum confidence threshold sliders.
 
-![CAAR Multi-Agent Fleet](docs/dashboard_agents.png)
+![CAAR Policies & Budgets](docs/dashboard_policies.png)
 
 ---
 

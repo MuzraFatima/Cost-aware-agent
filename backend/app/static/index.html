@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +11,13 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Immediate Theme Initializer -->
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('caar-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
   <!-- Custom Style Sheet -->
   <link rel="stylesheet" href="style.css">
 </head>
@@ -31,27 +38,32 @@
           <span id="provider-status-text">Checking Gateway...</span>
         </div>
       </div>
-      <!-- Tab Selector Navigation -->
-      <nav class="tabs-navigation">
-        <button class="tab-btn active" onclick="switchTab(event, 'tab-analytics')">
-          <i class="fa-solid fa-chart-line"></i> Analytics
+      <!-- Tab Selector Navigation & Theme Toggle -->
+      <div class="header-nav-group">
+        <nav class="tabs-navigation">
+          <button type="button" class="tab-btn active" onclick="switchTab(event, 'tab-analytics')">
+            <i class="fa-solid fa-chart-line"></i> Analytics
+          </button>
+          <button type="button" class="tab-btn" onclick="switchTab(event, 'tab-sandbox')">
+            <i class="fa-solid fa-flask"></i> Sandbox
+          </button>
+          <button type="button" class="tab-btn" onclick="switchTab(event, 'tab-rag')">
+            <i class="fa-solid fa-book-bookmark"></i> Knowledge Base (RAG)
+          </button>
+          <button type="button" class="tab-btn" onclick="switchTab(event, 'tab-agents')">
+            <i class="fa-solid fa-users-gear"></i> Multi-Agent System
+          </button>
+          <button type="button" class="tab-btn" onclick="switchTab(event, 'tab-policies')">
+            <i class="fa-solid fa-sliders"></i> Policies & Budgets
+          </button>
+          <button type="button" class="tab-btn" onclick="switchTab(event, 'tab-logs')">
+            <i class="fa-solid fa-list-check"></i> Logs
+          </button>
+        </nav>
+        <button type="button" id="theme-toggle-btn" class="theme-toggle-btn" onclick="toggleTheme()" title="Switch Light / Dark Theme">
+          <i class="fa-solid fa-moon" id="theme-toggle-icon"></i>
         </button>
-        <button class="tab-btn" onclick="switchTab(event, 'tab-sandbox')">
-          <i class="fa-solid fa-flask"></i> Sandbox
-        </button>
-        <button class="tab-btn" onclick="switchTab(event, 'tab-rag')">
-          <i class="fa-solid fa-book-bookmark"></i> Knowledge Base (RAG)
-        </button>
-        <button class="tab-btn" onclick="switchTab(event, 'tab-agents')">
-          <i class="fa-solid fa-users-gear"></i> Multi-Agent System
-        </button>
-        <button class="tab-btn" onclick="switchTab(event, 'tab-policies')">
-          <i class="fa-solid fa-sliders"></i> Policies & Budgets
-        </button>
-        <button class="tab-btn" onclick="switchTab(event, 'tab-logs')">
-          <i class="fa-solid fa-list-check"></i> Logs
-        </button>
-      </nav>
+      </div>
     </header>
 
     <!-- TAB 1: Analytics Dashboard -->
@@ -239,7 +251,7 @@
             <label for="sandbox-budget">Per-Request Budget Cap (USD) <span style="font-weight:normal; font-size:0.8rem; color:var(--color-text-muted);">(Optional)</span></label>
             <input type="number" id="sandbox-budget" class="form-select" placeholder="e.g. 0.0005" step="0.0001" min="0.0">
           </div>
-          <button class="action-btn" onclick="submitSandboxPrompt()">
+          <button type="button" class="action-btn" onclick="submitSandboxPrompt(event)">
             <i class="fa-solid fa-paper-plane"></i> Run Router Gateway
           </button>
         </div>
@@ -289,7 +301,7 @@
                 <div class="summary-label"><i class="fa-solid fa-circle-info"></i> Routing Reason</div>
                 <div class="summary-value" id="ss-reason" style="font-size: 0.8rem; color: var(--color-text-muted);">—</div>
               </div>
-              <div class="summary-metric" style="grid-column: 1 / -1; id=ss-rag-container; display:none;">
+              <div class="summary-metric" id="ss-rag-container" style="grid-column: 1 / -1; display: none;">
                 <div class="summary-label"><i class="fa-solid fa-book-bookmark"></i> Knowledge Base Citations</div>
                 <div class="summary-value" id="ss-rag-sources" style="font-size: 0.8rem; font-weight: normal; color: var(--color-text-muted);">—</div>
               </div>
@@ -312,10 +324,10 @@
             <div id="result-placeholder" class="result-placeholder">Outputs will appear here...</div>
             <div class="result-actions" id="result-feedback-container" style="display:none;">
               <span style="font-size: 0.8rem; color: var(--color-text-muted); display:flex; align-items:center;">Rate Answer Quality:</span>
-              <button class="feedback-btn up" onclick="submitSandboxFeedback(1.0)">
+              <button type="button" class="feedback-btn up" onclick="submitSandboxFeedback(1.0, event)">
                 <i class="fa-solid fa-thumbs-up"></i> Thumbs Up
               </button>
-              <button class="feedback-btn down" onclick="submitSandboxFeedback(0.0)">
+              <button type="button" class="feedback-btn down" onclick="submitSandboxFeedback(0.0, event)">
                 <i class="fa-solid fa-thumbs-down"></i> Thumbs Down
               </button>
             </div>
@@ -333,7 +345,7 @@
         </p>
         <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
           <input type="file" id="rag-file-input" accept=".txt,.md,.pdf,.json,.csv" class="form-select" style="max-width: 400px; padding: 0.4rem;">
-          <button class="action-btn" style="width: auto; padding: 0.6rem 1.5rem;" onclick="uploadKnowledgeDocument()">
+          <button type="button" class="action-btn" style="width: auto; padding: 0.6rem 1.5rem;" onclick="uploadKnowledgeDocument(event)">
             <i class="fa-solid fa-cloud-arrow-up"></i> Ingest Document
           </button>
         </div>
@@ -393,7 +405,7 @@
             <input type="number" id="cfg-monthly-budget" class="form-select" value="100.0" step="5.0" min="1.0">
           </div>
         </div>
-        <button class="action-btn" style="width: auto; padding: 0.6rem 1.5rem;" onclick="saveBudgetLimits()">
+        <button type="button" class="action-btn" style="width: auto; padding: 0.6rem 1.5rem;" onclick="saveBudgetLimits(event)">
           <i class="fa-solid fa-floppy-disk"></i> Save Budget Caps
         </button>
       </div>
@@ -402,7 +414,7 @@
       <div class="panel-card" style="margin-bottom: 1.5rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
           <h2>Domain Confidence Calibration & Evaluation Weights</h2>
-          <button class="action-btn" style="width: auto; padding: 0.4rem 1rem; font-size: 0.8rem;" onclick="saveCalibrationWeights()">
+          <button type="button" class="action-btn" style="width: auto; padding: 0.4rem 1rem; font-size: 0.8rem;" onclick="saveCalibrationWeights(event)">
             <i class="fa-solid fa-check"></i> Save Calibration Weights
           </button>
         </div>
