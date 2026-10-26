@@ -1,9 +1,9 @@
 # Cost-Aware Agent Router (CAAR)
 
-[![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-39%20passed%20%7C%202%20skipped-brightgreen.svg)](#-testing)
+[![CI](https://github.com/MuzraFatima/Cost-aware-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/MuzraFatima/Cost-aware-agent/actions/workflows/ci.yml)
 [![Evaluated Cost Savings](https://img.shields.io/badge/Cost%20Savings-84.9%25-success.svg)](#-benchmark-results)
 
 A confidence-based, multi-tier LLM routing system that dynamically routes queries to the lowest-cost capable agent and escalates only when confidence is insufficient.
@@ -81,16 +81,16 @@ flowchart TD
 
 * **Confidence-Based Routing**: Combines syntactic verification and semantic hedging detection to quantify output reliability before acceptance.
 * **Multi-Agent Tier Execution**:
-  - **Tier 1 (Cheap Agent)**: High-speed, low-cost baseline (GPT-4o-mini tier).
-  - **Tier 2 (RAG Agent)**: Retrieval-augmented agent for context-grounded queries.
-  - **Tier 3 (Frontier Agent)**: High-precision frontier LLM (GPT-4o tier) for complex coding and reasoning.
-  - **Tier 4 (Consensus Agent)**: Multi-agent verification loop with critic pass for mission-critical tasks.
+  - **Tier 1 (Cheap Agent)**: High-speed, low-cost baseline (small model — `groq/openai/gpt-oss-20b`).
+  - **Tier 2 (RAG Agent)**: Retrieval-augmented agent for context-grounded queries (small model — `groq/openai/gpt-oss-20b`).
+  - **Tier 3 (Frontier Agent)**: High-precision large-model single call (large model — `groq/openai/gpt-oss-120b`) for complex coding and reasoning.
+  - **Tier 4 (Consensus Agent)**: Multi-agent verification loop with critic pass for mission-critical tasks (large model — `groq/openai/gpt-oss-120b`).
 * **Dynamic Escalation**: Seamlessly promotes under-confident responses to higher tiers without manual intervention.
 * **Granular Cost Tracking**: Token-level expenditure calculation with local pricing tables and LiteLLM fallback rates.
 * **Latency & Token Usage Profiling**: Wall-clock latency and token breakdown (input/output) recorded per execution step.
 * **Zero-Config Mock / Sandbox Mode**: Fully deterministic built-in offline engine allowing complete local testing without external API keys.
-* **Optional Real LLM Integration**: Multi-provider support (OpenAI, Anthropic, Gemini) via unified LiteLLM client orchestration.
-* **Built-in Benchmark & Evaluation Framework**: Automated evaluation harness measuring accuracy, cost, latency, and escalation rates across multiple strategies.
+* **Optional Real LLM Integration**: Multi-provider support (OpenAI, Anthropic, Gemini, **Groq**) via unified LiteLLM client orchestration.
+* **Built-in Benchmark & Evaluation Framework**: Automated evaluation harness measuring accuracy (with 95% Wilson CI), cost, latency, and escalation rates across multiple strategies.
 * **FastAPI REST Backend**: Asynchronous REST API with structured Pydantic schemas, dependency injection, and SQLite ORM persistence.
 * **Interactive Web Dashboard**: Live SPA interface featuring real-time analytics KPIs, sandbox testing, policy threshold sliders, and detailed routing log inspection.
 * **Interactive Swagger / OpenAPI Documentation**: Auto-generated interactive API exploration and schema validation at `/docs`.
@@ -107,12 +107,12 @@ Visualizes aggregated token expenditure, daily/monthly budget caps, dynamic budg
 ![CAAR Analytics Dashboard](docs/dashboard_analytics.png)
 
 ### 2. Gateway Playground & Accepted Routing Cascade Audit
-Demonstrates live query execution with 100% calibrated confidence, `PASS (ACCEPTED)` verification, sub-second latency (578ms), and minimal cost ($0.000072) via Groq API.
+Demonstrates live query execution with high confidence, `PASS (ACCEPTED)` verification, sub-second latency (578ms), and minimal cost ($0.000072) via Groq API.
 
 ![CAAR Sandbox Gateway Playground](docs/dashboard_sandbox.png)
 
 ### 3. Policies & Budget Control Plane
-Configures global daily and monthly spend limits, domain confidence calibration weights (Syntactic, Semantic, Hedging, Factuality), and manual minimum confidence threshold sliders.
+Configures global daily and monthly spend limits, domain confidence weighting factors (Syntactic, Semantic, Hedging, Factuality), and manual minimum confidence threshold sliders.
 
 ![CAAR Policies & Budgets](docs/dashboard_policies.png)
 
@@ -165,12 +165,16 @@ CAAR is structured into modular layers separating API routing, orchestration log
 | **App Entrypoint** | [`backend/app/main.py`](backend/app/main.py) | FastAPI lifecycle management, CORS configuration, route registration, and static dashboard mounting. |
 | **Router Engine** | [`backend/app/core/router_engine.py`](backend/app/core/router_engine.py) | Coordinates cascade loops, complexity pre-classification, budget validation, and step aggregation. |
 | **Confidence Evaluator** | [`backend/app/core/confidence.py`](backend/app/core/confidence.py) | Computes syntactic verification and semantic uncertainty scores. |
+| **Answer Evaluator** | [`backend/app/core/answer_evaluator.py`](backend/app/core/answer_evaluator.py) | Domain-specific answer quality assessment and correctness scoring. |
+| **Confidence Calibration** | [`backend/app/core/confidence_calibration.py`](backend/app/core/confidence_calibration.py) | Domain-adaptive weighting matrices; dynamically adjusts confidence thresholds by complexity and budget pressure. |
+| **Multi-Agent Coordinator** | [`backend/app/core/multi_agent_coordinator.py`](backend/app/core/multi_agent_coordinator.py) | Orchestrates parallel multi-agent task execution and result synthesis. |
 | **Configuration** | [`backend/app/core/config.py`](backend/app/core/config.py) | Pydantic-based environment settings, default domain thresholds, and mock mode detection. |
-| **Agent Implementations** | [`backend/app/agents/`](backend/app/agents/) | Tiered agents (`CheapAgent`, `RAGAgent`, `FrontierAgent`, `ConsensusAgent`) and mock library. |
-| **API Endpoints** | [`backend/app/api/`](backend/app/api/) | Routes for completion requests, policy threshold adjustments, and analytical log queries. |
+| **7 Agent Implementations** | [`backend/app/agents/`](backend/app/agents/) | `CheapAgent` (T1), `RAGAgent` (T2), `FrontierAgent` (T3), `ConsensusAgent` (T4), `CodingAgent`, `ResearchAgent`, `AnalysisAgent` and deterministic mock library. |
+| **API Endpoints** | [`backend/app/api/`](backend/app/api/) | `router.py` (completions/feedback), `analytics.py` (KPIs/logs), `config.py` (policies), `agents.py` (registry), `rag.py` (uploads), `evaluator.py` (benchmark trigger). |
 | **Database & Models** | [`backend/app/db/`](backend/app/db/) | SQLAlchemy models (`RoutingLog`, `RoutingStep`, `RoutingPolicy`) and database initialization. |
-| **Cost Tracker** | [`backend/app/utils/cost_tracker.py`](backend/app/utils/cost_tracker.py) | Calculates input/output token pricing with fallback models. |
-| **Evaluation Framework** | [`backend/app/evaluation/`](backend/app/evaluation/) | Benchmark dataset, multi-strategy runner, and automated report generator. |
+| **Knowledge Base Service** | [`backend/app/services/knowledge_base.py`](backend/app/services/knowledge_base.py) | Term-frequency sparse vector indexing with cosine similarity search stored via SQLAlchemy. Supports `.txt`, `.md`, `.pdf`, `.json`, `.csv`. |
+| **Cost Tracker** | [`backend/app/utils/cost_tracker.py`](backend/app/utils/cost_tracker.py) | Calculates input/output token pricing with local `gpt-oss-20b`/`gpt-oss-120b` tables and LiteLLM fallback. |
+| **Evaluation Framework** | [`backend/app/evaluation/`](backend/app/evaluation/) | 42-query benchmark dataset (GSM8K/HumanEval/TriviaQA-sourced), 4-strategy runner, and Markdown/JSON report generator. |
 
 *For deep architectural design and routing algorithms, refer to [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [ROUTING_ALGORITHM.md](docs/ROUTING_ALGORITHM.md).*
 
@@ -178,23 +182,41 @@ CAAR is structured into modular layers separating API routing, orchestration log
 
 ## 📊 Benchmark Results
 
-The evaluation framework was executed across a curated benchmark of **20 queries** distributed evenly over **5 task categories** (Factual Questions, Coding, Mathematics, JSON / Structured Output, Reasoning & Verification). CAAR was evaluated against a fixed single-tier baseline (Tier 1 Only) and a frontier-only baseline (Highest-Tier / Tier 4 Baseline).
+The evaluation framework was executed across a curated benchmark of **42 queries** distributed over **5 task categories** (Factual Questions, Coding, Mathematics, JSON / Structured Output, Reasoning & Verification). CAAR was evaluated against a fixed single-tier baseline (Tier 1 Only), a single large-model call baseline (Tier-3 Only), and a full multi-agent consensus baseline (Tier-4 Consensus Only).
 
-On the project's 20-query benchmark, CAAR achieved **100% accuracy** while reducing benchmark cost by **84.9%** compared with the Highest-Tier baseline.
+On the project's 42-query mock-mode benchmark, CAAR achieved **100% accuracy** while reducing benchmark cost by **84.9%** compared with the Tier-4 Consensus Only baseline.
+
+> **Cost basis** — mock-mode figures use the token pricing table in `backend/app/utils/cost_tracker.py`:
+>
+> | Model | Role | Input $/1M tokens | Output $/1M tokens |
+> | :--- | :--- | :---: | :---: |
+> | `groq/openai/gpt-oss-20b` | Tier 1 & 2 (small model) | $0.10 | $0.40 |
+> | `groq/openai/gpt-oss-120b` | Tier 3 & 4 (large model) | $0.60 | $2.40 |
+>
+> The 84.9% savings figure compares CAAR's weighted per-query cost against the Tier-4 Consensus Only baseline (every query through the full consensus loop).
 
 ### Executive Comparison
 
-| Metric                       | Tier-1-Only (Baseline) | Highest-Tier (Tier 4 Baseline) | CAAR (Dynamic Cascade) |
-| :--------------------------- | :--------------------: | :----------------------------: | :--------------------: |
-| Success / Accuracy           |      80.0% (16/20)     |         100.0% (20/20)         |     100.0% (20/20)     |
-| Total Benchmark Cost         |        $0.000358       |            $0.065707           |        $0.009928       |
-| Cost Savings vs Highest-Tier |          99.5%         |              0.0%              |          84.9%         |
-| Average Cost per Query       |        $0.000018       |            $0.003285           |        $0.000496       |
-| Average Latency              |         403 ms         |             2002 ms            |         985 ms         |
-| Escalation Rate              |          0.0%          |              0.0%              |          15.0%         |
+| Metric | Tier-1-Only | Tier-3 Only (Single Frontier) | Tier-4 Consensus Only | CAAR (Dynamic Cascade) |
+| :--------------------------- | :--------------------: | :---------------------------: | :--------------------: | :--------------------: |
+| Success / Accuracy | 80.0% (16/20) | 100.0% (20/20) | 100.0% (20/20) | 100.0% (20/20) |
+| Total Benchmark Cost | $0.000358 | $0.018000 | $0.065707 | $0.009928 |
+| Cost Savings vs Tier-4 | 99.5% | 72.6% | 0.0% | **84.9%** |
+| Cost Savings vs Tier-3 | 98.0% | 0.0% | — | **44.8%** |
+| Average Cost per Query | $0.000018 | $0.000900 | $0.003285 | $0.000496 |
+| Average Latency | 403 ms | 1002 ms | 2002 ms | 985 ms |
+| Escalation Rate | 0.0% | 0.0% | 0.0% | 15.0% |
 
 > [!NOTE]
-> **Evaluation Disclaimer**: These figures represent benchmark and simulated/instrumented cost results derived from the project's standardized evaluation suite (`run_benchmark.py`). They reflect controlled benchmark scenarios and do not represent guaranteed production API pricing or vendor performance across all real-world deployments.
+> **Evaluation Disclaimer**: Figures are from mock-mode runs (`run_benchmark.py`, mode: mock, date: 2026-10-26, commit: `a45beec`, dataset: 42 queries across 5 categories). Mock responses use deterministic token cost tables — they are reproducible but are **not** live API measurements. Run with `--live` for real provider latency and cost data.
+
+---
+
+## 📊 Cost vs. Accuracy Pareto
+
+![CAAR Pareto — Cost vs. Accuracy](docs/pareto.png)
+
+*CAAR (green star) lies on the Pareto frontier: it matches Tier-4 Consensus accuracy (100%) at 85% lower cost per query.*
 
 ---
 
@@ -212,13 +234,13 @@ The benchmark suite assesses routing effectiveness across 5 distinct domains:
 
 ### Category-Wise Performance Summary
 
-| Category | Tier 1 Accuracy | Highest-Tier Accuracy | CAAR Accuracy | CAAR Avg Cost | CAAR Avg Latency |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Coding** | 100% | 100% | **100%** | $0.000986 | 1206 ms |
-| **Factual** | 100% | 100% | **100%** | $0.000012 | 404 ms |
-| **JSON** | 0% | 100% | **100%** | $0.000267 | 1056 ms |
-| **Mathematics** | 100% | 100% | **100%** | $0.000241 | 1204 ms |
-| **Reasoning** | 100% | 100% | **100%** | $0.000976 | 1056 ms |
+| Category | Tier 1 Accuracy | Tier-3 Only Accuracy | Tier-4 Accuracy | CAAR Accuracy | CAAR Avg Cost | CAAR Avg Latency |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Coding** | 100% | 100% | 100% | **100%** | $0.000986 | 1206 ms |
+| **Factual** | 100% | 100% | 100% | **100%** | $0.000012 | 404 ms |
+| **JSON** | 0% | 100% | 100% | **100%** | $0.000267 | 1056 ms |
+| **Mathematics** | 100% | 100% | 100% | **100%** | $0.000241 | 1204 ms |
+| **Reasoning** | 100% | 100% | 100% | **100%** | $0.000976 | 1056 ms |
 
 * **Coding**: Maintained 100% accuracy via syntax verification and selective frontier tier escalation when required (avg cost: $0.000986, avg latency: 1206 ms).
 * **Factual**: Resolved directly at Tier 1 with minimal cost and fast response times (avg cost: $0.000012, avg latency: 404 ms).
@@ -234,25 +256,37 @@ The benchmark suite assesses routing effectiveness across 5 distinct domains:
 
 The repository maintains an automated test suite verifying routing policies, API endpoints, LLM integration fallbacks, and evaluation integrity.
 
+```bash
+# bash / Linux / macOS
+python -m pytest
+```
+
 ```powershell
+# PowerShell / Windows
 python -m pytest
 ```
 
 ### Verified Test Suite Result
 
 ```
-collected 41 items
+collected 70 items
 
-tests\test_benchmark.py .........       [ 21%]
-tests\test_e2e_live_path.py ........ss  [ 46%]
-tests\test_llm_integration.py ......    [ 60%]
-tests\test_router.py ................   [100%]
+tests/test_benchmark.py .........       [12%]
+tests/test_budget.py ....               [18%]
+tests/test_e2e_live_path.py ........    [29%]
+tests/test_evaluator.py ........        [40%]
+tests/test_llm_integration.py ......    [49%]
+tests/test_multi_agent.py ...           [53%]
+tests/test_rag.py .......               [63%]
+tests/test_router.py ................   [100%]
 
-======================== 39 passed, 2 skipped in 71.29s ========================
+============================== 70 passed, 8 warnings in 92.20s ============================
 ```
 
-* **39 Passed**: All unit tests, routing logic tests, confidence evaluators, mock fallback paths, and database persistence checks pass completely.
-* **2 Skipped**: The two skipped tests (`test_live_api_*` in `tests/test_e2e_live_path.py`) are optional live-provider integration tests that require actual provider API keys. By default, the suite runs offline in mock mode.
+*Mode: mock | Python 3.14 | Date: 2026-10-26 | Commit: `a45beec`*
+
+* **70 Passed**: All unit tests, routing logic tests, confidence evaluators, mock fallback paths, and database persistence checks pass completely.
+* **8 Warnings**: Deprecation notices from `litellm` async logging and `pydantic` v2 class-based config; do not affect test outcomes.
 
 ---
 
@@ -281,50 +315,70 @@ cost-aware-agent-router/
 │   │   ├── agents/               # Tiered agent implementations (T1–T4) & mock catalog
 │   │   │   ├── __init__.py
 │   │   │   ├── _mock_answers.py  # Deterministic offline mock responses
-│   │   │   ├── base_agent.py     # Base agent interface
-│   │   │   ├── cheap_agent.py    # Tier 1: Fast/cheap agent (gpt-4o-mini)
-│   │   │   ├── consensus_agent.py# Tier 4: Multi-agent consensus loop
-│   │   │   ├── frontier_agent.py # Tier 3: High-capability frontier agent (gpt-4o)
-│   │   │   └── rag_agent.py      # Tier 2: Knowledge-augmented agent
+│   │   │   ├── analysis_agent.py # Specialised analysis agent
+│   │   │   ├── base.py           # Base agent interface
+│   │   │   ├── cheap_agent.py    # Tier 1: Fast/cheap agent (gpt-oss-20b small model)
+│   │   │   ├── coding_agent.py   # Specialised coding agent
+│   │   │   ├── consensus_agent.py# Tier 4: Multi-agent consensus loop (gpt-oss-120b)
+│   │   │   ├── frontier_agent.py # Tier 3: High-capability large-model agent (gpt-oss-120b)
+│   │   │   ├── rag_agent.py      # Tier 2: Knowledge-augmented agent (gpt-oss-20b)
+│   │   │   └── research_agent.py # Specialised research agent
 │   │   ├── api/                  # FastAPI REST endpoints
+│   │   │   ├── agents.py         # Agent registry and status endpoint
 │   │   │   ├── analytics.py      # Analytics KPI and log retrieval routes
 │   │   │   ├── config.py         # Dynamic policy configuration routes
+│   │   │   ├── evaluator.py      # Benchmark trigger API endpoint
+│   │   │   ├── rag.py            # Document upload and knowledge-base routes
 │   │   │   └── router.py         # Query completion and user feedback routes
 │   │   ├── core/                 # Core engine and configuration
-│   │   │   ├── confidence.py     # Syntactic and semantic hedging evaluators
-│   │   │   ├── config.py         # Environment variables & threshold settings
-│   │   │   └── router_engine.py  # Cascade loop, complexity classifier & tracking
+│   │   │   ├── answer_evaluator.py    # Answer quality evaluation helpers
+│   │   │   ├── confidence.py          # Syntactic and semantic hedging evaluators
+│   │   │   ├── confidence_calibration.py # Domain-adaptive weight calibration service
+│   │   │   ├── config.py              # Environment variables & threshold settings
+│   │   │   ├── multi_agent_coordinator.py # Multi-agent task orchestration
+│   │   │   └── router_engine.py       # Cascade loop, complexity classifier & tracking
 │   │   ├── db/                   # Database schemas and session management
 │   │   │   ├── models.py         # SQLAlchemy ORM models (RoutingLog, RoutingStep, RoutingPolicy)
 │   │   │   └── session.py        # Database session factory & schema migration helper
 │   │   ├── evaluation/           # Benchmark framework
-│   │   │   ├── dataset.py        # 20-query evaluation dataset
+│   │   │   ├── dataset.py        # 42-query evaluation dataset (GSM8K, HumanEval, TriviaQA)
 │   │   │   ├── evaluator.py      # Multi-strategy benchmark runner & validators
 │   │   │   └── formatter.py      # Markdown benchmark report generator
+│   │   ├── services/             # Business-layer services
+│   │   │   └── knowledge_base.py # Term-frequency sparse retrieval & SQLAlchemy chunk store
 │   │   ├── static/               # Interactive web dashboard
 │   │   │   ├── app.js            # Dashboard logic, charts, and API interactions
 │   │   │   ├── index.html        # Dashboard layout and tab views
 │   │   │   └── style.css         # Modern design tokens and styling
 │   │   ├── utils/                # Utility modules
 │   │   │   ├── cost_tracker.py   # Token pricing and cost estimation helpers
-│   │   │   └── llm_client.py     # Centralized LiteLLM client key propagation
+│   │   │   └── llm_client.py     # Centralised LiteLLM client key propagation
 │   │   └── main.py               # FastAPI application entrypoint
-│   └── requirements.txt          # Python dependencies
+│   └── requirements.txt          # Python dependencies (tested on Python 3.11)
+├── .github/
+│   └── workflows/
+│       └── ci.yml                # GitHub Actions CI (Python 3.11 & 3.12, mock mode)
 ├── docs/                         # Extended project documentation
 │   ├── ARCHITECTURE.md           # Detailed component architecture and DB schemas
 │   ├── DEMO.md                   # Step-by-step interactive demo script
 │   ├── EVALUATION.md             # Benchmark methodology and evaluation design
-│   └── ROUTING_ALGORITHM.md      # Mathematical logic for confidence & escalation
-├── tests/                        # Automated Pytest suite
+│   ├── ROUTING_ALGORITHM.md      # Mathematical logic for confidence & escalation
+│   └── pareto.png                # Cost vs. accuracy Pareto chart
+├── tests/                        # Automated Pytest suite (8 test files, 70 tests)
 │   ├── test_benchmark.py         # Evaluation dataset and validator tests
+│   ├── test_budget.py            # Budget limit and pressure tests
 │   ├── test_e2e_live_path.py     # Full end-to-end agent execution tests
+│   ├── test_evaluator.py         # Answer evaluator unit tests
 │   ├── test_llm_integration.py   # Environment and LiteLLM integration tests
+│   ├── test_multi_agent.py       # Multi-agent coordinator tests
+│   ├── test_rag.py               # RAG knowledge base tests
 │   └── test_router.py            # Routing engine, cascade, and evaluator tests
 ├── .env.example                  # Environment configuration template
 ├── .gitignore                    # Git ignore specifications
 ├── BENCHMARK_REPORT.md           # Auto-generated benchmark report artifact
+├── LICENSE                       # MIT License
 ├── README.md                     # Project documentation
-└── run_benchmark.py              # CLI benchmark execution script
+└── run_benchmark.py              # CLI benchmark execution script (--live, --runs N)
 ```
 
 ---
@@ -333,32 +387,77 @@ cost-aware-agent-router/
 
 ### 1. Clone the Repository
 
+```bash
+git clone https://github.com/MuzraFatima/Cost-aware-agent.git
+cd Cost-aware-agent
+```
+
 ```powershell
+# PowerShell equivalent
 git clone https://github.com/MuzraFatima/Cost-aware-agent.git
 cd Cost-aware-agent
 ```
 
 ### 2. Create and Activate Virtual Environment
 
-```powershell
+```bash
+# bash / macOS / Linux
 python -m venv venv
-# On Windows (PowerShell):
-venv\Scripts\Activate.ps1
-# On Linux/macOS:
 source venv/bin/activate
+```
+
+```powershell
+# PowerShell / Windows
+python -m venv venv
+venv\Scripts\Activate.ps1
 ```
 
 ### 3. Install Dependencies
 
-```powershell
+> Tested on **Python 3.11** and **Python 3.12**.
+
+```bash
 pip install -r backend/requirements.txt
 ```
 
-### 4. Start the Application Server
+### 4. Configure Environment
+
+```bash
+# bash
+cp .env.example .env
+# Edit .env — add your GROQ_API_KEY for live mode, or leave defaults for mock mode
+```
 
 ```powershell
+# PowerShell
+Copy-Item .env.example .env
+# Edit .env — add your GROQ_API_KEY for live mode, or leave defaults for mock mode
+```
+
+The `.env` file with the Groq defaults (no changes needed for mock mode):
+
+```ini
+GROQ_API_KEY=gsk_...
+
+TIER_1_MODEL=groq/openai/gpt-oss-20b
+TIER_2_MODEL=groq/openai/gpt-oss-20b
+TIER_3_MODEL=groq/openai/gpt-oss-120b
+TIER_4_MODEL=groq/openai/gpt-oss-120b
+
+DATABASE_URL=sqlite:///./caar.db
+```
+
+### 5. Start the Application Server
+
+```bash
 python -m uvicorn backend.app.main:app --reload
 ```
+
+```powershell
+# PowerShell equivalent
+python -m uvicorn backend.app.main:app --reload
+```
+
 
 Once running, access the services:
 * **Interactive Web Dashboard**: [http://localhost:8000/](http://localhost:8000/)
@@ -374,8 +473,13 @@ CAAR operates with **zero configuration out-of-the-box in Mock Mode**. If no key
 ### Live High-Speed Inference with Groq API
 The system is natively optimized for **Groq API** for ultra-fast, cost-effective inference:
 
-1. Copy `.env.example` to `.env` (or edit existing `.env`):
+1. Copy `.env.example` to `.env`:
+   ```bash
+   # bash
+   cp .env.example .env
+   ```
    ```powershell
+   # PowerShell
    Copy-Item .env.example .env
    ```
 2. Set your `GROQ_API_KEY` inside `.env`:
@@ -383,7 +487,7 @@ The system is natively optimized for **Groq API** for ultra-fast, cost-effective
    # Groq API Key (High-throughput, low-latency live inference)
    GROQ_API_KEY=gsk_...
 
-   # Groq Model per Tier
+   # Groq Model per Tier (small model for T1/T2, large model for T3/T4)
    TIER_1_MODEL=groq/openai/gpt-oss-20b
    TIER_2_MODEL=groq/openai/gpt-oss-20b
    TIER_3_MODEL=groq/openai/gpt-oss-120b
@@ -400,13 +504,13 @@ When `GROQ_API_KEY` is configured, CAAR immediately transitions to live mode and
 
 Execute the full automated test suite verifying routing policies, API endpoints, LLM integration, and benchmark validators:
 
-```powershell
+```bash
 python -m pytest
 ```
 
 To run with verbose per-test reporting:
 
-```powershell
+```bash
 python -m pytest -v
 ```
 
@@ -416,11 +520,18 @@ python -m pytest -v
 
 Execute the automated multi-strategy benchmark suite:
 
-```powershell
+```bash
+# Mock mode (default — no API keys needed)
 python run_benchmark.py
+
+# Live API mode (requires GROQ_API_KEY in .env)
+python run_benchmark.py --live
+
+# 3 repeated runs with 95% Wilson CI on accuracy
+python run_benchmark.py --runs 3
 ```
 
-The script evaluates the 20 benchmark queries across Tier-1-Only, Highest-Tier-Only, and CAAR Dynamic Cascade strategies, outputting comparative metrics to the console and regenerating [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md).
+The script evaluates the 42 benchmark queries across Tier-1-Only, Tier-3-Only, Tier-4-Consensus-Only, and CAAR Dynamic Cascade strategies, outputting comparative metrics to the console and regenerating [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md).
 
 ---
 
@@ -430,8 +541,8 @@ The web application served at `http://localhost:8000/` provides a comprehensive 
 
 * ⚡ **Analytics Tab**: Real-time KPI summary cards (Total Requests, Aggregated Spend Today, Monthly Spend, Budget Pressure Gauge 0–100, Estimated Savings vs. Frontier-only, Average Latency, Escalation Rate) and interactive Chart.js visualizations (Cumulative Cost Savings, Tier Distribution, and Task Domain Share).
 * 🧪 **Sandbox Tab (Gateway Playground)**: Interactive testing environment featuring quick-start preset chips (`Coding`, `Math`, `RAG Query`, `Analysis`, `JSON Escalation`), domain selector, format enforcement (`JSON`, `Python`), optional per-request budget caps, real-time step cascade visualization, calibrated confidence scoring, and one-click output clipboard copying with user feedback ratings.
-* 📖 **Knowledge Base (RAG) Tab**: Document upload and vector indexing manager supporting `.txt`, `.md`, `.pdf`, `.json`, and `.csv`. Inspect indexed chunks, sizes, and ingestion timestamps powering Tier 2 context retrieval.
-* 👥 **Multi-Agent System Tab**: Live fleet overview displaying all 7 specialized agents (Cheap Direct Agent, Augmented RAG Agent, Specialized Analysis Agent, Specialized Coding Agent, Specialized Research Agent, Frontier Reasoning Agent, Consensus Loop Agent) with model bindings, cost profiles, and live Groq connection status badges.
+* 📖 **Knowledge Base (RAG) Tab**: Document upload and sparse retrieval manager supporting `.txt`, `.md`, `.pdf`, `.json`, and `.csv`. Documents are stored as term-frequency sparse vectors with cosine similarity search via SQLAlchemy. Inspect indexed chunks, sizes, and ingestion timestamps powering Tier 2 context retrieval.
+* 👥 **Multi-Agent System Tab**: Live fleet overview displaying all **7 specialized agents** (Cheap Direct Agent, Augmented RAG Agent, Specialized Analysis Agent, Specialized Coding Agent, Specialized Research Agent, Frontier Reasoning Agent, Consensus Loop Agent) with model bindings, cost profiles, and live Groq connection status badges.
 * ⚙️ **Policies & Budgets Tab**: Global daily and monthly budget limit configuration with dynamic budget pressure throttling (auto-downgrading tiers when pressure > 80), domain confidence calibration sliders (Syntactic, Semantic, Hedging, Factuality weights), and per-domain minimum confidence threshold sliders persisted directly to SQLite.
 * 📋 **Logs Tab**: Real-time searchable and tier-filterable audit log table. Expand any row (`▶`) to inspect full prompts, generated outputs, per-step latency, token counts, and step-by-step tier escalation reasons.
 
@@ -490,12 +601,35 @@ Dynamic multi-tier model routing addresses one of the fundamental scaling challe
 
 ## 🔮 Future Improvements
 
-- [ ] **Vector Store RAG Backend**: Integrate vector databases (e.g., ChromaDB, Pinecone, Qdrant) into `RAGAgent` to replace the in-memory lookup.
+- [ ] **Dense Vector RAG Backend**: Integrate dense vector databases (e.g., ChromaDB, Pinecone, Qdrant) into `RAGAgent` to replace the current term-frequency sparse cosine retrieval.
 - [ ] **Asynchronous Judge LLM**: Incorporate an optional background LLM-as-a-Judge pass for semantic truthfulness verification.
 - [ ] **Streaming Token Response Support**: Implement Server-Sent Events (SSE) / WebSocket streaming through the cascade pipeline.
 - [ ] **Multi-Turn Contextual Routing**: Maintain conversation state across turns to dynamically adjust start tiers based on dialogue history.
 - [ ] **Distributed Tracing**: Export OpenTelemetry spans to Jaeger or Prometheus for enterprise monitoring.
 - [ ] **Containerization**: Provide official multi-stage `Dockerfile` and `docker-compose.yml` deployment templates.
+- [ ] **Statistical Calibration**: Fit Platt scaling or isotonic regression on a held-out validation set to produce a proper reliability diagram.
+
+---
+
+## 📖 Related Work
+
+CAARs multi-tier routing approach draws on and extends prior work in LLM cost optimization:
+
+* **FrugalGPT** (Chen et al. 2023) introduced the idea of cascading LLM calls by routing queries to cheaper models first and escalating only when the cheaper model fails a quality gate. CAAR differs in that it uses **heuristic complexity pre-classification** (keyword density, prompt length, domain type) to choose a starting tier directly, rather than always starting at Tier 1 and checking confidence post-hoc. CAAR also tracks cost and latency per step and writes a full audit trail to SQLite.
+
+* **RouteLLM** (Ong et al. 2024) trains a binary router that classifies queries as "easy" (cheap model) or "hard" (strong model) using preference data. CAAR's router (see [`router_engine.py`](backend/app/core/router_engine.py)) uses a **rule-based complexity pre-classifier** combining keyword patterns, task-type detection, and prompt length signals — requiring no training data or preference pairs, making it zero-shot deployable.
+
+CAARs principal contribution is combining pre-classification, post-generation confidence gating, multi-agent consensus, and per-tier cost accounting into a single observable, configurable system with an interactive dashboard.
+
+---
+
+## ⚠️ Limitations
+
+1. **Heuristic Confidence Misses Confidently Wrong Answers**: The `ConfidenceEvaluator` detects uncertainty phrases (hedging) and structural failures (syntax errors). It cannot detect a fluent, syntactically correct answer that is factually wrong. A confident but incorrect answer will pass the confidence gate and not be escalated.
+
+2. **Small Benchmark**: The evaluation dataset contains 42 queries. While distributed across 5 categories and drawn from public benchmarks (GSM8K, HumanEval, TriviaQA), this sample size is insufficient to draw statistically robust conclusions about real-world accuracy. Use `--runs 3` or more to report Wilson confidence intervals.
+
+3. **Mock-Mode Results Are Simulated**: Default benchmark figures come from mock mode, where responses are deterministic and costs are calculated from a local pricing table — not from live API calls. Live latency, token counts, and actual billing may differ substantially. Pass `--live` to `run_benchmark.py` for real measurements.
 
 ---
 

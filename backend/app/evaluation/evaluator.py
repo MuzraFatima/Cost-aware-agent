@@ -3,8 +3,9 @@ evaluator.py
 ============
 Benchmarking engine for comparing:
   1. Tier 1 Only (Commodity fast direct agent)
-  2. Highest-tier Only (Consensus & Verification loop agent)
-  3. Cost-Aware Agent Router (CAAR)
+  2. Tier-3 Only (Single frontier call — no consensus loop)
+  3. Tier-4 Consensus Only (Multi-agent verification loop)
+  4. Cost-Aware Agent Router (CAAR)
 
 Measures:
   - Success / Accuracy rate (%)
@@ -12,7 +13,8 @@ Measures:
   - Latency (ms total & avg per query)
   - Confidence score (0.0 - 1.0)
   - Escalation rate (%)
-  - Cost savings vs Highest-tier baseline ($ & %)
+  - Cost savings vs Tier-4 Consensus Only baseline ($ & %)
+  - Cost savings vs Tier-3 Only baseline ($ & %)
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from typing import Dict, Any, List, Optional, Tuple
 
 from backend.app.agents.cheap_agent import CheapAgent
 from backend.app.agents.consensus_agent import ConsensusAgent
+from backend.app.agents.frontier_agent import FrontierAgent
 from backend.app.core.confidence import ConfidenceEvaluator
 from backend.app.core.router_engine import RouterEngine
 from backend.app.evaluation.dataset import BenchmarkItem, BENCHMARK_DATASET
@@ -64,6 +67,8 @@ class StrategyMetrics:
     escalation_rate_pct: float
     cost_savings_vs_highest_usd: float = 0.0
     cost_savings_vs_highest_pct: float = 0.0
+    cost_savings_vs_tier3_usd: float = 0.0
+    cost_savings_vs_tier3_pct: float = 0.0
     category_breakdown: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
@@ -153,11 +158,13 @@ class BenchmarkEvaluator:
         self.dataset = dataset or list(BENCHMARK_DATASET)
         self.mock_mode = mock_mode
         self.tier_1_agent = CheapAgent()
-        self.highest_tier_agent = ConsensusAgent()
+        self.tier_3_agent = FrontierAgent()
+        self.tier_4_consensus_agent = ConsensusAgent()
         self.router_engine = RouterEngine(mock_mode=mock_mode)
         if mock_mode:
             self.tier_1_agent.mock_mode = True
-            self.highest_tier_agent.mock_mode = True
+            self.tier_3_agent.mock_mode = True
+            self.tier_4_consensus_agent.mock_mode = True
 
     async def evaluate_strategy_tier_1_only(self) -> Tuple[StrategyMetrics, List[QueryResult]]:
         """Run all benchmark items through Tier 1 (Cheap Direct Agent) only."""
@@ -210,12 +217,12 @@ class BenchmarkEvaluator:
         metrics = self._aggregate_metrics("Tier 1 Only", results)
         return metrics, results
 
-    async def evaluate_strategy_highest_tier_only(self) -> Tuple[StrategyMetrics, List[QueryResult]]:
-        """Run all benchmark items through Tier 4 (Consensus Agent) only."""
+    async def evaluate_strategy_tier_3_only(self) -> Tuple[StrategyMetrics, List[QueryResult]]:
+        """Run all benchmark items through Tier 3 (FrontierAgent — single large-model call) only."""
         results: List[QueryResult] = []
         for item in self.dataset:
             try:
-                res = await self.highest_tier_agent.execute(
+                res = await self.tier_3_agent.execute(
                     prompt=item.prompt,
                     expected_format=item.expected_format
                 )
@@ -232,7 +239,58 @@ class BenchmarkEvaluator:
                     item_id=item.id,
                     category=item.category,
                     prompt=item.prompt,
-                    strategy="Highest-tier Only (Consensus)",
+                    strategy="Tier-3 Only (Single Frontier Call)",
+                    response_text=text,
+                    is_success=is_success,
+                    confidence_score=confidence,
+                    cost=cost,
+                    latency_ms=latency,
+                    final_tier=3,
+                    escalated=False,
+                    error_message=None if is_success else reason
+                ))
+            except Exception as e:
+                results.append(QueryResult(
+                    item_id=item.id,
+                    category=item.category,
+                    prompt=item.prompt,
+                    strategy="Tier-3 Only (Single Frontier Call)",
+                    response_text="",
+                    is_success=False,
+                    confidence_score=0.0,
+                    cost=0.0,
+                    latency_ms=0,
+                    final_tier=3,
+                    escalated=False,
+                    error_message=str(e)
+                ))
+
+        metrics = self._aggregate_metrics("Tier-3 Only (Single Frontier Call)", results)
+        return metrics, results
+
+    async def evaluate_strategy_tier4_consensus_only(self) -> Tuple[StrategyMetrics, List[QueryResult]]:
+        """Run all benchmark items through Tier 4 (Consensus Agent — multi-agent loop) only."""
+        results: List[QueryResult] = []
+        for item in self.dataset:
+            try:
+                res = await self.tier_4_consensus_agent.execute(
+                    prompt=item.prompt,
+                    expected_format=item.expected_format
+                )
+                text = res["text"]
+                cost = float(res["cost"])
+                latency = int(res["latency_ms"])
+                confidence = await ConfidenceEvaluator.calculate_confidence(
+                    prompt=item.prompt,
+                    response_text=text,
+                    expected_format=item.expected_format
+                )
+                is_success, reason = validate_item_response(item, text)
+                results.append(QueryResult(
+                    item_id=item.id,
+                    category=item.category,
+                    prompt=item.prompt,
+                    strategy="Tier-4 Consensus Only",
                     response_text=text,
                     is_success=is_success,
                     confidence_score=confidence,
@@ -247,7 +305,7 @@ class BenchmarkEvaluator:
                     item_id=item.id,
                     category=item.category,
                     prompt=item.prompt,
-                    strategy="Highest-tier Only (Consensus)",
+                    strategy="Tier-4 Consensus Only",
                     response_text="",
                     is_success=False,
                     confidence_score=0.0,
@@ -258,7 +316,7 @@ class BenchmarkEvaluator:
                     error_message=str(e)
                 ))
 
-        metrics = self._aggregate_metrics("Highest-tier Only (Consensus)", results)
+        metrics = self._aggregate_metrics("Tier-4 Consensus Only", results)
         return metrics, results
 
     async def evaluate_strategy_router(self) -> Tuple[StrategyMetrics, List[QueryResult]]:
@@ -317,19 +375,29 @@ class BenchmarkEvaluator:
         return metrics, results
 
     async def run_full_benchmark(self) -> BenchmarkReport:
-        """Executes all 3 strategies and builds a comprehensive comparative report."""
+        """Executes all 4 strategies and builds a comprehensive comparative report."""
         t1_metrics, t1_results = await self.evaluate_strategy_tier_1_only()
-        ht_metrics, ht_results = await self.evaluate_strategy_highest_tier_only()
+        t3_metrics, t3_results = await self.evaluate_strategy_tier_3_only()
+        t4_metrics, t4_results = await self.evaluate_strategy_tier4_consensus_only()
         router_metrics, router_results = await self.evaluate_strategy_router()
 
-        # Compute cost savings vs Highest-tier baseline
-        baseline_cost = ht_metrics.total_cost_usd
-        if baseline_cost > 0:
-            router_metrics.cost_savings_vs_highest_usd = round(max(baseline_cost - router_metrics.total_cost_usd, 0.0), 6)
-            router_metrics.cost_savings_vs_highest_pct = round((router_metrics.cost_savings_vs_highest_usd / baseline_cost) * 100, 2)
+        # Compute cost savings vs Tier-4 Consensus Only baseline
+        t4_baseline_cost = t4_metrics.total_cost_usd
+        if t4_baseline_cost > 0:
+            router_metrics.cost_savings_vs_highest_usd = round(max(t4_baseline_cost - router_metrics.total_cost_usd, 0.0), 6)
+            router_metrics.cost_savings_vs_highest_pct = round((router_metrics.cost_savings_vs_highest_usd / t4_baseline_cost) * 100, 2)
+            t1_metrics.cost_savings_vs_highest_usd = round(max(t4_baseline_cost - t1_metrics.total_cost_usd, 0.0), 6)
+            t1_metrics.cost_savings_vs_highest_pct = round((t1_metrics.cost_savings_vs_highest_usd / t4_baseline_cost) * 100, 2)
+            t3_metrics.cost_savings_vs_highest_usd = round(max(t4_baseline_cost - t3_metrics.total_cost_usd, 0.0), 6)
+            t3_metrics.cost_savings_vs_highest_pct = round((t3_metrics.cost_savings_vs_highest_usd / t4_baseline_cost) * 100, 2)
 
-            t1_metrics.cost_savings_vs_highest_usd = round(max(baseline_cost - t1_metrics.total_cost_usd, 0.0), 6)
-            t1_metrics.cost_savings_vs_highest_pct = round((t1_metrics.cost_savings_vs_highest_usd / baseline_cost) * 100, 2)
+        # Compute cost savings vs Tier-3 Only baseline
+        t3_baseline_cost = t3_metrics.total_cost_usd
+        if t3_baseline_cost > 0:
+            router_metrics.cost_savings_vs_tier3_usd = round(max(t3_baseline_cost - router_metrics.total_cost_usd, 0.0), 6)
+            router_metrics.cost_savings_vs_tier3_pct = round((router_metrics.cost_savings_vs_tier3_usd / t3_baseline_cost) * 100, 2)
+            t1_metrics.cost_savings_vs_tier3_usd = round(max(t3_baseline_cost - t1_metrics.total_cost_usd, 0.0), 6)
+            t1_metrics.cost_savings_vs_tier3_pct = round((t1_metrics.cost_savings_vs_tier3_usd / t3_baseline_cost) * 100, 2)
 
         categories = sorted(list({item.category for item in self.dataset}))
 
@@ -339,10 +407,11 @@ class BenchmarkEvaluator:
             categories=categories,
             strategies={
                 "tier_1_only": t1_metrics,
-                "highest_tier_only": ht_metrics,
+                "tier_3_only": t3_metrics,
+                "tier_4_consensus_only": t4_metrics,
                 "cost_aware_router": router_metrics
             },
-            item_results=t1_results + ht_results + router_results
+            item_results=t1_results + t3_results + t4_results + router_results
         )
 
     def _aggregate_metrics(self, strategy_name: str, results: List[QueryResult]) -> StrategyMetrics:
@@ -395,37 +464,41 @@ def format_benchmark_markdown_report(report: BenchmarkReport) -> str:
     """Renders a comprehensive, visually clean Markdown comparison report."""
     s = report.strategies
     t1 = s["tier_1_only"]
-    ht = s["highest_tier_only"]
+    t3 = s["tier_3_only"]
+    t4 = s["tier_4_consensus_only"]
     caar = s["cost_aware_router"]
 
     md = []
     md.append("# Cost-Aware Agent Router (CAAR) — Evaluation & Benchmark Report")
-    md.append(f"\n*Generated on: `{report.timestamp}` | Benchmark Size: `{report.total_items} queries` across 5 categories*\n")
+    md.append(f"\n*Generated on: `{report.timestamp}` | Mode: mock | Benchmark Size: `{report.total_items} queries` across 5 categories*\n")
 
     md.append("## Executive Summary Comparison Table\n")
-    md.append("| Metric | Tier 1 Only | Highest-Tier Only (T4) | Cost-Aware Router (CAAR) |")
-    md.append("| :--- | :---: | :---: | :---: |")
-    md.append(f"| **Success / Accuracy** | `{t1.accuracy_pct:.1f}%` ({t1.successful_queries}/{t1.total_queries}) | `{ht.accuracy_pct:.1f}%` ({ht.successful_queries}/{ht.total_queries}) | **`{caar.accuracy_pct:.1f}%`** ({caar.successful_queries}/{caar.total_queries}) |")
-    md.append(f"| **Avg Confidence Score** | `{t1.avg_confidence:.2f}` | `{ht.avg_confidence:.2f}` | **`{caar.avg_confidence:.2f}`** |")
-    md.append(f"| **Total Cost (USD)** | `${t1.total_cost_usd:.6f}` | `${ht.total_cost_usd:.6f}` | **`${caar.total_cost_usd:.6f}`** |")
-    md.append(f"| **Avg Cost / Query** | `${t1.avg_cost_per_query_usd:.6f}` | `${ht.avg_cost_per_query_usd:.6f}` | **`${caar.avg_cost_per_query_usd:.6f}`** |")
-    md.append(f"| **Cost Savings vs T4** | `{t1.cost_savings_vs_highest_pct:.1f}%` (${t1.cost_savings_vs_highest_usd:.6f}) | `0.0%` ($0.00) | **`{caar.cost_savings_vs_highest_pct:.1f}%`** (${caar.cost_savings_vs_highest_usd:.6f}) |")
-    md.append(f"| **Avg Latency (ms)** | `{t1.avg_latency_ms:.0f} ms` | `{ht.avg_latency_ms:.0f} ms` | **`{caar.avg_latency_ms:.0f} ms`** |")
-    md.append(f"| **Escalation Rate** | `0.0%` (Fixed) | `0.0%` (Fixed) | **`{caar.escalation_rate_pct:.1f}%`** (Dynamic) |")
+    md.append("| Metric | Tier 1 Only | Tier-3 Only (Single Frontier) | Tier-4 Consensus Only | CAAR (Dynamic Cascade) |")
+    md.append("| :--- | :---: | :---: | :---: | :---: |")
+    md.append(f"| **Success / Accuracy** | `{t1.accuracy_pct:.1f}%` ({t1.successful_queries}/{t1.total_queries}) | `{t3.accuracy_pct:.1f}%` ({t3.successful_queries}/{t3.total_queries}) | `{t4.accuracy_pct:.1f}%` ({t4.successful_queries}/{t4.total_queries}) | **`{caar.accuracy_pct:.1f}%`** ({caar.successful_queries}/{caar.total_queries}) |")
+    md.append(f"| **Avg Confidence Score** | `{t1.avg_confidence:.2f}` | `{t3.avg_confidence:.2f}` | `{t4.avg_confidence:.2f}` | **`{caar.avg_confidence:.2f}`** |")
+    md.append(f"| **Total Cost (USD)** | `${t1.total_cost_usd:.6f}` | `${t3.total_cost_usd:.6f}` | `${t4.total_cost_usd:.6f}` | **`${caar.total_cost_usd:.6f}`** |")
+    md.append(f"| **Avg Cost / Query** | `${t1.avg_cost_per_query_usd:.6f}` | `${t3.avg_cost_per_query_usd:.6f}` | `${t4.avg_cost_per_query_usd:.6f}` | **`${caar.avg_cost_per_query_usd:.6f}`** |")
+    md.append(f"| **Cost Savings vs Tier-4** | `{t1.cost_savings_vs_highest_pct:.1f}%` | `{t3.cost_savings_vs_highest_pct:.1f}%` | `0.0%` | **`{caar.cost_savings_vs_highest_pct:.1f}%`** |")
+    md.append(f"| **Cost Savings vs Tier-3** | `{t1.cost_savings_vs_tier3_pct:.1f}%` | `0.0%` | — | **`{caar.cost_savings_vs_tier3_pct:.1f}%`** |")
+    md.append(f"| **Avg Latency (ms)** | `{t1.avg_latency_ms:.0f} ms` | `{t3.avg_latency_ms:.0f} ms` | `{t4.avg_latency_ms:.0f} ms` | **`{caar.avg_latency_ms:.0f} ms`** |")
+    md.append(f"| **Escalation Rate** | `0.0%` (Fixed) | `0.0%` (Fixed) | `0.0%` (Fixed) | **`{caar.escalation_rate_pct:.1f}%`** (Dynamic) |")
 
     md.append("\n## Category-Wise Breakdown\n")
-    md.append("| Category | Tier 1 Accuracy | Highest-Tier Accuracy | CAAR Accuracy | CAAR Avg Cost | CAAR Avg Latency |")
-    md.append("| :--- | :---: | :---: | :---: | :---: | :---: |")
+    md.append("| Category | Tier 1 Accuracy | Tier-3 Only Accuracy | Tier-4 Accuracy | CAAR Accuracy | CAAR Avg Cost | CAAR Avg Latency |")
+    md.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
 
     for cat in report.categories:
         c_t1 = t1.category_breakdown.get(cat, {})
-        c_ht = ht.category_breakdown.get(cat, {})
+        c_t3 = t3.category_breakdown.get(cat, {})
+        c_t4 = t4.category_breakdown.get(cat, {})
         c_caar = caar.category_breakdown.get(cat, {})
         cat_title = cat.replace("_", " ").title()
         md.append(
             f"| **{cat_title}** "
             f"| `{c_t1.get('accuracy_pct', 0):.0f}%` "
-            f"| `{c_ht.get('accuracy_pct', 0):.0f}%` "
+            f"| `{c_t3.get('accuracy_pct', 0):.0f}%` "
+            f"| `{c_t4.get('accuracy_pct', 0):.0f}%` "
             f"| **`{c_caar.get('accuracy_pct', 0):.0f}%`** "
             f"| `${c_caar.get('avg_cost_usd', 0):.6f}` "
             f"| `{c_caar.get('avg_latency_ms', 0):.0f} ms` |"
@@ -434,8 +507,9 @@ def format_benchmark_markdown_report(report: BenchmarkReport) -> str:
     md.append("\n## Key Insights & System Performance")
     md.append(f"""
 1. **High Quality with Dramatic Cost Savings**:
-   - CAAR achieves **{caar.accuracy_pct:.1f}% accuracy** matching highest-tier performance.
-   - Saves **{caar.cost_savings_vs_highest_pct:.1f}% in API billing** (${caar.cost_savings_vs_highest_usd:.6f} saved vs Highest-Tier baseline).
+   - CAAR achieves **{caar.accuracy_pct:.1f}% accuracy** matching Tier-4 Consensus performance.
+   - Saves **{caar.cost_savings_vs_highest_pct:.1f}% in API billing** vs Tier-4 Consensus Only (${caar.cost_savings_vs_highest_usd:.6f} saved).
+   - Saves **{caar.cost_savings_vs_tier3_pct:.1f}% in API billing** vs Tier-3 Only single frontier call (${caar.cost_savings_vs_tier3_usd:.6f} saved).
 
 2. **Smart Dynamic Escalation**:
    - Simple queries (Factual, Arithmetic) are resolved at **Tier 1 (400ms latency, minimal cost)**.
@@ -443,7 +517,7 @@ def format_benchmark_markdown_report(report: BenchmarkReport) -> str:
 
 3. **Elimination of Structural Failures**:
    - Tier 1 only fails on strict structured JSON ({t1.category_breakdown.get('json', {}).get('accuracy_pct', 0):.0f}% JSON accuracy).
-   - CAAR automatically detects low syntactic confidence on malformed JSON and escalates to Frontier tiers, achieving **{caar.category_breakdown.get('json', {}).get('accuracy_pct', 100):.0f}% JSON accuracy**.
+   - CAAR automatically detects low syntactic confidence on malformed JSON and escalates to large-model tiers, achieving **{caar.category_breakdown.get('json', {}).get('accuracy_pct', 100):.0f}% JSON accuracy**.
 """)
 
     return "\n".join(md)
