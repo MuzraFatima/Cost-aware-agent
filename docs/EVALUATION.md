@@ -10,25 +10,19 @@ The benchmark suite (`backend/app/evaluation/`) provides a reproducible, fully a
 
 **File:** `backend/app/evaluation/dataset.py`
 
-**42 queries** across 5 categories (≥6 per category):
+**38 queries** across 5 categories (≥6 per category):
 
 | Category | Count | Source | License | Validation |
 |---|---|---|---|---|
-| `factual` | 10 | TriviaQA subset | Apache 2.0 | `contains` — keyword in response (case-insensitive) |
-| `coding` | 8 | HumanEval subset | MIT (OpenAI 2021) | `python_code` — extracted block compiles without `SyntaxError` |
-| `mathematics` | 8 | GSM8K subset | MIT (OpenAI 2021) | `contains` — exact numeric answer present |
+| `factual` | 10 | Original | N/A | `contains` — keyword in response (case-insensitive) |
+| `coding` | 8 | Original | N/A | `python_code` — extracted block compiles without `SyntaxError` |
+| `mathematics` | 8 | Original | N/A | `contains` — exact numeric answer present |
 | `json` | 6 | Original | N/A | `json_schema` — parses as valid JSON via `json.loads()` |
 | `reasoning` | 6 | Original | N/A | `contains` — expected verification keywords present |
 
-### Source Citations
+### Benchmark Item Structure
 
-| Source | Paper / Repository | License |
-|---|---|---|
-| **TriviaQA** | Joshi et al. 2017, [huggingface.co/datasets/trivia_qa](https://huggingface.co/datasets/trivia_qa) | Apache 2.0 |
-| **HumanEval** | Chen et al. 2021, [github.com/openai/human-eval](https://github.com/openai/human-eval) | MIT |
-| **GSM8K** | Cobbe et al. 2021, [github.com/openai/grade-school-math](https://github.com/openai/grade-school-math) | MIT |
-
-> **Note**: Only public-domain short-answer items were used. No copyrighted long-form answers or training labels are reproduced.
+All 38 items are curated original benchmark samples. Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.
 
 Each `BenchmarkItem` has:
 ```python
@@ -42,7 +36,7 @@ class BenchmarkItem:
     validation_type: str = "contains"      # "contains" | "python_code" | "json_schema"
     expected_keywords: List[str] = []
     description: str = ""
-    source: str = "original"              # "gsm8k" | "humaneval" | "triviaqa" | "original"
+    source: str = "original"
 ```
 
 ---
@@ -117,9 +111,12 @@ Results are printed to stdout and saved to `BENCHMARK_REPORT.md`.
 
 ![CAAR Cost vs. Accuracy Pareto](pareto.png)
 
-*Mode: mock | Dataset: 42 queries | 5 categories | Date: 2026-10-26 | Commit: a45beec*
+*Mode: mock | Dataset: 38 queries | 5 categories | Date: 2026-10-27*
 
-CAAR lies on the Pareto frontier: it matches Tier-4 Consensus accuracy (100%) at a fraction of the cost ($0.000496 vs $0.003285 per query).
+CAAR lies on the Pareto frontier: it achieves 57.9% accuracy matching Tier-3 Frontier performance at 85.3% lower cost than Tier-4 Consensus ($0.000078 vs $0.000529 per query).
+
+> **Mock Mode Note**: Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.
+
 
 ---
 

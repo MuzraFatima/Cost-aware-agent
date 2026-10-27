@@ -4,7 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/MuzraFatima/Cost-aware-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/MuzraFatima/Cost-aware-agent/actions/workflows/ci.yml)
-[![Evaluated Cost Savings](https://img.shields.io/badge/Cost%20Savings-84.9%25-success.svg)](#-benchmark-results)
+[![Evaluated Cost Savings](https://img.shields.io/badge/Cost%20Savings-85.3%25-success.svg)](#-benchmark-results)
+
 
 A confidence-based, multi-tier LLM routing system that dynamically routes queries to the lowest-cost capable agent and escalates only when confidence is insufficient.
 
@@ -182,9 +183,9 @@ CAAR is structured into modular layers separating API routing, orchestration log
 
 ## 📊 Benchmark Results
 
-The evaluation framework was executed across a curated benchmark of **42 queries** distributed over **5 task categories** (Factual Questions, Coding, Mathematics, JSON / Structured Output, Reasoning & Verification). CAAR was evaluated against a fixed single-tier baseline (Tier 1 Only), a single large-model call baseline (Tier-3 Only), and a full multi-agent consensus baseline (Tier-4 Consensus Only).
+The evaluation framework was executed across a curated benchmark of **38 queries** (len(BENCHMARK_DATASET) = 38) distributed over **5 task categories** (Factual Questions, Coding, Mathematics, JSON / Structured Output, Reasoning & Verification). CAAR was evaluated against a fixed single-tier baseline (Tier 1 Only), a single large-model call baseline (Tier-3 Only), and a full multi-agent consensus baseline (Tier-4 Consensus Only).
 
-On the project's 42-query mock-mode benchmark, CAAR achieved **100% accuracy** while reducing benchmark cost by **84.9%** compared with the Tier-4 Consensus Only baseline.
+On the project's 38-query mock-mode benchmark, CAAR achieved **57.9% accuracy** while reducing benchmark cost by **85.3%** compared with the Tier-4 Consensus Only baseline. *(Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.)*
 
 > **Cost basis** — mock-mode figures use the token pricing table in `backend/app/utils/cost_tracker.py`:
 >
@@ -193,22 +194,24 @@ On the project's 42-query mock-mode benchmark, CAAR achieved **100% accuracy** w
 > | `groq/openai/gpt-oss-20b` | Tier 1 & 2 (small model) | $0.10 | $0.40 |
 > | `groq/openai/gpt-oss-120b` | Tier 3 & 4 (large model) | $0.60 | $2.40 |
 >
-> The 84.9% savings figure compares CAAR's weighted per-query cost against the Tier-4 Consensus Only baseline (every query through the full consensus loop).
+> The 85.3% savings figure compares CAAR's weighted per-query cost against the Tier-4 Consensus Only baseline ($0.000078 vs $0.000529 per query). Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.
 
 ### Executive Comparison
 
 | Metric | Tier-1-Only | Tier-3 Only (Single Frontier) | Tier-4 Consensus Only | CAAR (Dynamic Cascade) |
 | :--------------------------- | :--------------------: | :---------------------------: | :--------------------: | :--------------------: |
-| Success / Accuracy | 80.0% (16/20) | 100.0% (20/20) | 100.0% (20/20) | 100.0% (20/20) |
-| Total Benchmark Cost | $0.000358 | $0.018000 | $0.065707 | $0.009928 |
-| Cost Savings vs Tier-4 | 99.5% | 72.6% | 0.0% | **84.9%** |
-| Cost Savings vs Tier-3 | 98.0% | 0.0% | — | **44.8%** |
-| Average Cost per Query | $0.000018 | $0.000900 | $0.003285 | $0.000496 |
-| Average Latency | 403 ms | 1002 ms | 2002 ms | 985 ms |
-| Escalation Rate | 0.0% | 0.0% | 0.0% | 15.0% |
+| Success / Accuracy | 55.3% (21/38) | 57.9% (22/38) | 60.5% (23/38) | **57.9%** (22/38) |
+| Total Benchmark Cost | $0.000593 | $0.003990 | $0.020084 | **$0.002953** |
+| Cost Savings vs Tier-4 | 97.0% | 80.1% | 0.0% | **85.3%** |
+| Cost Savings vs Tier-3 | 85.1% | 0.0% | — | **26.0%** |
+| Average Cost per Query | $0.000016 | $0.000105 | $0.000529 | **$0.000078** |
+| Average Latency | 407 ms | 1231 ms | 2015 ms | **734 ms** |
+| Escalation Rate | 0.0% (Fixed) | 0.0% (Fixed) | 0.0% (Fixed) | **13.2%** (Dynamic) |
+
+*Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.*
 
 > [!NOTE]
-> **Evaluation Disclaimer**: Figures are from mock-mode runs (`run_benchmark.py`, mode: mock, date: 2026-10-26, commit: `a45beec`, dataset: 42 queries across 5 categories). Mock responses use deterministic token cost tables — they are reproducible but are **not** live API measurements. Run with `--live` for real provider latency and cost data.
+> **Evaluation Disclaimer**: Figures are from 3 repeated mock-mode runs (`python run_benchmark.py --runs 3`, mode: mock, dataset: 38 queries across 5 categories, CAAR 95% Wilson CI: 48.7% – 66.6%). Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy. Run with `--live` for real provider latency and cost data.
 
 ---
 
@@ -216,7 +219,7 @@ On the project's 42-query mock-mode benchmark, CAAR achieved **100% accuracy** w
 
 ![CAAR Pareto — Cost vs. Accuracy](docs/pareto.png)
 
-*CAAR (green star) lies on the Pareto frontier: it matches Tier-4 Consensus accuracy (100%) at 85% lower cost per query.*
+*CAAR (green star) lies on the Pareto frontier: it achieves 57.9% accuracy matching Tier-3 Frontier performance at 85.3% lower cost per query than Tier-4 Consensus ($0.000078 vs $0.000529). Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.*
 
 ---
 
@@ -236,17 +239,19 @@ The benchmark suite assesses routing effectiveness across 5 distinct domains:
 
 | Category | Tier 1 Accuracy | Tier-3 Only Accuracy | Tier-4 Accuracy | CAAR Accuracy | CAAR Avg Cost | CAAR Avg Latency |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Coding** | 100% | 100% | 100% | **100%** | $0.000986 | 1206 ms |
-| **Factual** | 100% | 100% | 100% | **100%** | $0.000012 | 404 ms |
-| **JSON** | 0% | 100% | 100% | **100%** | $0.000267 | 1056 ms |
-| **Mathematics** | 100% | 100% | 100% | **100%** | $0.000241 | 1204 ms |
-| **Reasoning** | 100% | 100% | 100% | **100%** | $0.000976 | 1056 ms |
+| **Coding** | 75% | 75% | 75% | **75%** | $0.000159 | 504 ms |
+| **Factual** | 40% | 40% | 50% | **40%** | $0.000017 | 410 ms |
+| **JSON** | 0% | 17% | 17% | **17%** | $0.000024 | 746 ms |
+| **Mathematics** | 75% | 75% | 75% | **75%** | $0.000072 | 1205 ms |
+| **Reasoning** | 83% | 83% | 83% | **83%** | $0.000132 | 944 ms |
 
-* **Coding**: Maintained 100% accuracy via syntax verification and selective frontier tier escalation when required (avg cost: $0.000986, avg latency: 1206 ms).
-* **Factual**: Resolved directly at Tier 1 with minimal cost and fast response times (avg cost: $0.000012, avg latency: 404 ms).
-* **JSON**: Tier 1 failed completely on strict structural formatting (0%), while CAAR detected syntactic errors and escalated to achieve 100% accuracy (avg cost: $0.000267, avg latency: 1056 ms).
-* **Mathematics**: Maintained 100% precision across multi-step numerical queries (avg cost: $0.000241, avg latency: 1204 ms).
-* **Reasoning**: Complex multi-step reasoning handled reliably with epistemic verification (avg cost: $0.000976, avg latency: 1056 ms).
+*Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.*
+
+* **Coding**: Maintained 75% accuracy via syntax verification and selective frontier tier escalation when required (avg cost: $0.000159, avg latency: 504 ms). *(Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.)*
+* **Factual**: Resolved directly at Tier 1 with minimal cost and fast response times (avg cost: $0.000017, avg latency: 410 ms). *(Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.)*
+* **JSON**: Tier 1 failed completely on strict structural formatting (0%), while CAAR detected syntactic errors and escalated to achieve 17% accuracy (avg cost: $0.000024, avg latency: 746 ms). *(Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.)*
+* **Mathematics**: Maintained 75% precision across numerical queries (avg cost: $0.000072, avg latency: 1205 ms). *(Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.)*
+* **Reasoning**: Complex multi-step reasoning handled reliably with epistemic verification (avg cost: $0.000132, avg latency: 944 ms). *(Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy.)*
 
 *For detailed evaluation methodologies and validation logic, refer to [EVALUATION.md](docs/EVALUATION.md).*
 
@@ -269,24 +274,16 @@ python -m pytest
 ### Verified Test Suite Result
 
 ```
-collected 70 items
-
-tests/test_benchmark.py .........       [12%]
-tests/test_budget.py ....               [18%]
-tests/test_e2e_live_path.py ........    [29%]
-tests/test_evaluator.py ........        [40%]
-tests/test_llm_integration.py ......    [49%]
-tests/test_multi_agent.py ...           [53%]
-tests/test_rag.py .......               [63%]
-tests/test_router.py ................   [100%]
-
-============================== 70 passed, 8 warnings in 92.20s ============================
+$ python -m pytest -q
+......................................................................   [100%]
+70 passed, 10 warnings in 106.53s (0:01:46)
 ```
 
-*Mode: mock | Python 3.14 | Date: 2026-10-26 | Commit: `a45beec`*
+*Mode: mock | Python 3.14 | Date: 2026-10-27*
 
 * **70 Passed**: All unit tests, routing logic tests, confidence evaluators, mock fallback paths, and database persistence checks pass completely.
-* **8 Warnings**: Deprecation notices from `litellm` async logging and `pydantic` v2 class-based config; do not affect test outcomes.
+* **10 Warnings**: Deprecation notices from `litellm` async logging, `fastapi.testclient`, and `pydantic` v2 class-based config; do not affect test outcomes.
+
 
 ---
 
@@ -531,7 +528,8 @@ python run_benchmark.py --live
 python run_benchmark.py --runs 3
 ```
 
-The script evaluates the 42 benchmark queries across Tier-1-Only, Tier-3-Only, Tier-4-Consensus-Only, and CAAR Dynamic Cascade strategies, outputting comparative metrics to the console and regenerating [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md).
+The script evaluates the 38 benchmark queries (len(BENCHMARK_DATASET) = 38) across Tier-1-Only, Tier-3-Only, Tier-4-Consensus-Only, and CAAR Dynamic Cascade strategies, outputting comparative metrics to the console and regenerating [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md).
+
 
 ---
 
@@ -627,9 +625,10 @@ CAARs principal contribution is combining pre-classification, post-generation co
 
 1. **Heuristic Confidence Misses Confidently Wrong Answers**: The `ConfidenceEvaluator` detects uncertainty phrases (hedging) and structural failures (syntax errors). It cannot detect a fluent, syntactically correct answer that is factually wrong. A confident but incorrect answer will pass the confidence gate and not be escalated.
 
-2. **Small Benchmark**: The evaluation dataset contains 42 queries. While distributed across 5 categories and drawn from public benchmarks (GSM8K, HumanEval, TriviaQA), this sample size is insufficient to draw statistically robust conclusions about real-world accuracy. Use `--runs 3` or more to report Wilson confidence intervals.
+2. **Small Benchmark**: The evaluation dataset contains 38 queries (len(BENCHMARK_DATASET) = 38). While distributed across 5 categories of curated benchmark tasks, this sample size is insufficient to draw statistically robust conclusions about real-world accuracy. Use `--runs 3` or more to report Wilson confidence intervals.
 
-3. **Mock-Mode Results Are Simulated**: Default benchmark figures come from mock mode, where responses are deterministic and costs are calculated from a local pricing table — not from live API calls. Live latency, token counts, and actual billing may differ substantially. Pass `--live` to `run_benchmark.py` for real measurements.
+3. **Mock-Mode Results Are Simulated**: Default benchmark figures come from mock mode, where responses are deterministic and costs are calculated from a local pricing table — not from live API calls. Mock mode uses canned answers; it validates routing and cost accounting, not real accuracy. Live latency, token counts, and actual billing may differ substantially. Pass `--live` to `run_benchmark.py` for real measurements.
+
 
 ---
 

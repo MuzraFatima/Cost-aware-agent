@@ -5,9 +5,9 @@ Curated, reproducible benchmark dataset for evaluating LLM agent tiers and
 the Cost-Aware Agent Router (CAAR).
 
 Categories covered:
-  1. Factual Questions  — TriviaQA-subset (public domain, Apache 2.0)
-  2. Coding             — HumanEval-subset (MIT License, OpenAI)
-  3. Mathematics        — GSM8K-subset (MIT License, OpenAI)
+  1. Factual Questions  — Curated factual knowledge queries (original)
+  2. Coding             — Python algorithm tasks (original)
+  3. Mathematics        — Arithmetic and word problems (original)
   4. JSON / Structured Output — JSON-schema generation tasks (original)
   5. Reasoning & Verification — Multi-step logic tasks (original)
 
@@ -28,12 +28,12 @@ class BenchmarkItem:
     validation_type: str = "contains"
     expected_keywords: List[str] = field(default_factory=list)
     description: str = ""
-    source: str = "original"          # "gsm8k" | "humaneval" | "triviaqa" | "original"
+    source: str = "original"          # "original"
 
 
 BENCHMARK_DATASET: List[BenchmarkItem] = [
     # -------------------------------------------------------------------------
-    # 1. Factual Questions  (TriviaQA-inspired subset — Apache 2.0)
+    # 1. Factual Questions  (original short-answer queries)
     # Validator: contains — at least one expected_keyword appears case-insensitively
     # -------------------------------------------------------------------------
     BenchmarkItem(
@@ -44,7 +44,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["Paris"],
         description="World capital lookup (France)",
-        source="triviaqa"
+        source="original"
     ),
     BenchmarkItem(
         id="fact_02",
@@ -54,7 +54,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["Tokyo"],
         description="World capital lookup (Japan)",
-        source="triviaqa"
+        source="original"
     ),
     BenchmarkItem(
         id="fact_03",
@@ -64,7 +64,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["299,792,458", "3", "10^8", "10\u2078", "metres per second", "m/s"],
         description="Fundamental physical constant",
-        source="triviaqa"
+        source="original"
     ),
     BenchmarkItem(
         id="fact_04",
@@ -74,7 +74,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["Armstrong", "Neil"],
         description="Historical milestone — Apollo 11",
-        source="triviaqa"
+        source="original"
     ),
     BenchmarkItem(
         id="fact_05",
@@ -84,7 +84,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["Gold", "Au"],
         description="Periodic table lookup",
-        source="triviaqa"
+        source="original"
     ),
     BenchmarkItem(
         id="fact_06",
@@ -94,7 +94,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["1945"],
         description="Historical year lookup",
-        source="triviaqa"
+        source="original"
     ),
     BenchmarkItem(
         id="fact_07",
@@ -104,7 +104,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["Jupiter"],
         description="Astronomy factual lookup",
-        source="triviaqa"
+        source="original"
     ),
     BenchmarkItem(
         id="fact_08",
@@ -114,7 +114,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["206"],
         description="Human anatomy factual",
-        source="triviaqa"
+        source="original"
     ),
     BenchmarkItem(
         id="fact_09",
@@ -124,7 +124,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["H2O", "H\u2082O"],
         description="Basic chemistry symbol",
-        source="triviaqa"
+        source="original"
     ),
     BenchmarkItem(
         id="fact_10",
@@ -134,11 +134,11 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["Leonardo", "da Vinci", "DaVinci"],
         description="Art history factual",
-        source="triviaqa"
+        source="original"
     ),
 
     # -------------------------------------------------------------------------
-    # 2. Coding  (HumanEval-inspired subset — MIT License, OpenAI 2021)
+    # 2. Coding  (original Python coding tasks)
     # Validator: python_code — extracts Python block and compiles without SyntaxError
     # -------------------------------------------------------------------------
     BenchmarkItem(
@@ -150,7 +150,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="python_code",
         expected_keywords=["def ", "while", "return"],
         description="Linked list reversal (HumanEval-inspired)",
-        source="humaneval"
+        source="original"
     ),
     BenchmarkItem(
         id="code_02",
@@ -161,7 +161,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="python_code",
         expected_keywords=["def ", "fibonacci"],
         description="Fibonacci sequence generator (HumanEval-inspired)",
-        source="humaneval"
+        source="original"
     ),
     BenchmarkItem(
         id="code_03",
@@ -172,7 +172,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="python_code",
         expected_keywords=["def ", "binary_search", "mid"],
         description="Binary search algorithm (HumanEval-inspired)",
-        source="humaneval"
+        source="original"
     ),
     BenchmarkItem(
         id="code_04",
@@ -183,7 +183,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="python_code",
         expected_keywords=["def ", "two_sum"],
         description="Two-sum hash map algorithm (HumanEval-inspired)",
-        source="humaneval"
+        source="original"
     ),
     BenchmarkItem(
         id="code_05",
@@ -194,7 +194,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="python_code",
         expected_keywords=["def ", "palindrome", "return"],
         description="Palindrome check (HumanEval-inspired)",
-        source="humaneval"
+        source="original"
     ),
     BenchmarkItem(
         id="code_06",
@@ -205,7 +205,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="python_code",
         expected_keywords=["def ", "for", "return"],
         description="Manual maximum search",
-        source="humaneval"
+        source="original"
     ),
     BenchmarkItem(
         id="code_07",
@@ -216,7 +216,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="python_code",
         expected_keywords=["def ", "dict", "return"],
         description="Word frequency counter (HumanEval-inspired)",
-        source="humaneval"
+        source="original"
     ),
     BenchmarkItem(
         id="code_08",
@@ -227,11 +227,11 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="python_code",
         expected_keywords=["def ", "flatten", "return"],
         description="Nested list flattening",
-        source="humaneval"
+        source="original"
     ),
 
     # -------------------------------------------------------------------------
-    # 3. Mathematics  (GSM8K-inspired subset — MIT License, OpenAI 2021)
+    # 3. Mathematics  (original math and word problems)
     # Validator: contains — exact numeric answer appears in response
     # -------------------------------------------------------------------------
     BenchmarkItem(
@@ -242,7 +242,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["5535"],
         description="Multiplication arithmetic (GSM8K-inspired)",
-        source="gsm8k"
+        source="original"
     ),
     BenchmarkItem(
         id="math_02",
@@ -252,7 +252,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["25"],
         description="Division arithmetic (GSM8K-inspired)",
-        source="gsm8k"
+        source="original"
     ),
     BenchmarkItem(
         id="math_03",
@@ -262,7 +262,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["1024"],
         description="Exponentiation (GSM8K-inspired)",
-        source="gsm8k"
+        source="original"
     ),
     BenchmarkItem(
         id="math_04",
@@ -272,7 +272,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["50"],
         description="Addition arithmetic (GSM8K-inspired)",
-        source="gsm8k"
+        source="original"
     ),
     BenchmarkItem(
         id="math_05",
@@ -282,7 +282,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["8", "$8", "8.00"],
         description="Word problem — change calculation (GSM8K-inspired)",
-        source="gsm8k"
+        source="original"
     ),
     BenchmarkItem(
         id="math_06",
@@ -292,7 +292,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["12"],
         description="Square root (GSM8K-inspired)",
-        source="gsm8k"
+        source="original"
     ),
     BenchmarkItem(
         id="math_07",
@@ -302,7 +302,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["150"],
         description="Distance = speed * time word problem (GSM8K-inspired)",
-        source="gsm8k"
+        source="original"
     ),
     BenchmarkItem(
         id="math_08",
@@ -312,7 +312,7 @@ BENCHMARK_DATASET: List[BenchmarkItem] = [
         validation_type="contains",
         expected_keywords=["30"],
         description="Percentage calculation (GSM8K-inspired)",
-        source="gsm8k"
+        source="original"
     ),
 
     # -------------------------------------------------------------------------
